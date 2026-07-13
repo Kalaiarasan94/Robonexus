@@ -102,7 +102,7 @@ export default function Home() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
             className="relative w-full h-[320px] sm:h-[420px] rounded-3xl overflow-hidden border border-brand-card-border shadow-2xl bg-brand-dark/40 backdrop-blur-sm group"
           >
             <RevealMask className="h-full w-full" delay={0.4}>

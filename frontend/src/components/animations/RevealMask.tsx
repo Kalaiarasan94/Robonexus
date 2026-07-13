@@ -23,7 +23,7 @@ export default function RevealMask({
         transition={{
           duration: 0.8,
           delay,
-          ease: [0.16, 1, 0.3, 1], // Professional cubic-bezier
+          ease: [0.16, 1, 0.3, 1] as [number, number, number, number], // Professional cubic-bezier
         }}
       >
         {children}

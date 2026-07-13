@@ -14,5 +14,37 @@
             "price": "\u20b9800.00"
         },
         "paymentScreenshot": ".\/uploads\/receipt_1782811150_7968.png"
+    },
+    {
+        "orderId": "ORD-DDC42-1783951881",
+        "timestamp": "2026-07-13 16:11:21",
+        "customer": {
+            "name": "kalaaai",
+            "phone": "8956895412",
+            "email": "kalaaaaaa@gmail.com",
+            "address": "USA"
+        },
+        "product": {
+            "id": "prod-core-x",
+            "name": "Nexus-Core Model-X Hardware + Onboarding Bundle",
+            "price": "\u20b9800.00"
+        },
+        "paymentScreenshot": "pay_TD10Eo3NXAesN5"
+    },
+    {
+        "orderId": "ORD-8E8C9-1783952274",
+        "timestamp": "2026-07-13 16:17:54",
+        "customer": {
+            "name": "paandi",
+            "phone": "7904242107",
+            "email": "padni@gmail.com",
+            "address": "mumbai"
+        },
+        "product": {
+            "id": "prod-core-x",
+            "name": "Nexus-Core Model-X Hardware + Onboarding Bundle",
+            "price": "\u20b9800.00"
+        },
+        "paymentScreenshot": "pay_TD177phWY4Gm2H"
     }
 ]

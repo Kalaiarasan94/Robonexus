@@ -89,54 +89,22 @@ if ($pdo !== null) {
     }
 }
 
-// 5. Handle Payment Screenshot Upload
-$dest_path = '';
-if (isset($_FILES['payment_screenshot']) && $_FILES['payment_screenshot']['error'] === UPLOAD_ERR_OK) {
-    $fileTmpPath = $_FILES['payment_screenshot']['tmp_name'];
-    $fileName = $_FILES['payment_screenshot']['name'];
-    $fileSize = $_FILES['payment_screenshot']['size'];
-    $fileType = $_FILES['payment_screenshot']['type'];
-    
-    $fileNameCmps = explode(".", $fileName);
-    $fileExtension = strtolower(end($fileNameCmps));
-    
-    $allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'];
-    
-    if (in_array($fileExtension, $allowedExtensions)) {
-        // Create upload dir if it doesn't exist
-        $uploadFileDir = './uploads/';
-        if (!file_exists($uploadFileDir)) {
-            mkdir($uploadFileDir, 0777, true);
-        }
-        
-        // Clean name and make it unique
-        $newFileName = 'receipt_' . time() . '_' . rand(1000, 9999) . '.' . $fileExtension;
-        $dest_path = $uploadFileDir . $newFileName;
-        
-        if (!move_uploaded_file($fileTmpPath, $dest_path)) {
-            http_response_code(500);
-            echo json_encode([
-                "status" => "error",
-                "message" => "There was an error moving the uploaded payment screenshot."
-            ]);
-            exit();
-        }
-    } else {
-        http_response_code(400);
-        echo json_encode([
-            "status" => "error",
-            "message" => "Unsupported file upload format. Allowed extensions: " . implode(', ', $allowedExtensions)
-        ]);
-        exit();
-    }
-} else {
+// 5. Verify Razorpay Payment reference (paid on the aimstorm.in gateway)
+$razorpayPaymentId = isset($_POST['razorpayPaymentId']) ? trim($_POST['razorpayPaymentId']) : '';
+$razorpayOrderId = isset($_POST['razorpayOrderId']) ? trim($_POST['razorpayOrderId']) : '';
+$paymentAmount = isset($_POST['paymentAmount']) ? trim($_POST['paymentAmount']) : '800.00';
+
+if (empty($razorpayPaymentId)) {
     http_response_code(400);
     echo json_encode([
         "status" => "error",
-        "message" => "Payment receipt screenshot is required for verifying registration and product checkout."
+        "message" => "A completed Razorpay payment is required to finish onboarding."
     ]);
     exit();
 }
+
+// The payment id is stored in the orders record as the proof-of-payment reference.
+$dest_path = $razorpayPaymentId;
 
 // 6. Generate Unique References
 $registerId = "RNX-2026-" . rand(100000, 999999);
@@ -190,6 +158,21 @@ if ($pdo !== null) {
             ':bank_name' => $bankName,
             ':account_number' => $accountNumber,
             ':ifsc_code' => $ifscCode,
+            ':timestamp' => $timestamp
+        ]);
+
+        // D. Insert into payments (Razorpay transaction record)
+        $stmtPay = $pdo->prepare("INSERT INTO `payments` (`payment_id`, `order_ref`, `razorpay_order_id`, `register_id`, `customer_name`, `customer_email`, `customer_phone`, `amount`, `status`, `timestamp`) VALUES (:payment_id, :order_ref, :razorpay_order_id, :register_id, :customer_name, :customer_email, :customer_phone, :amount, :status, :timestamp)");
+        $stmtPay->execute([
+            ':payment_id' => $razorpayPaymentId,
+            ':order_ref' => $orderId,
+            ':razorpay_order_id' => $razorpayOrderId,
+            ':register_id' => $registerId,
+            ':customer_name' => $fullName,
+            ':customer_email' => $email,
+            ':customer_phone' => $phone,
+            ':amount' => $paymentAmount,
+            ':status' => 'paid',
             ':timestamp' => $timestamp
         ]);
 
@@ -263,6 +246,24 @@ $newUserData = [
 $users[] = $newUserData;
 $jsonWriteSuccess = file_put_contents($usersFile, json_encode($users, JSON_PRETTY_PRINT)) !== false;
 
+// Fallback Payments JSON
+$paymentsFile = './payments.json';
+$payments = file_exists($paymentsFile) ? json_decode(file_get_contents($paymentsFile), true) : [];
+if (!is_array($payments)) $payments = [];
+$payments[] = [
+    "paymentId" => $razorpayPaymentId,
+    "orderRef" => $orderId,
+    "razorpayOrderId" => $razorpayOrderId,
+    "registerId" => $registerId,
+    "name" => $fullName,
+    "email" => $email,
+    "phone" => $phone,
+    "amount" => $paymentAmount,
+    "status" => "paid",
+    "timestamp" => $timestamp
+];
+file_put_contents($paymentsFile, json_encode($payments, JSON_PRETTY_PRINT));
+
 if (!$savedToDb && !$jsonWriteSuccess) {
     http_response_code(500);
     echo json_encode([
@@ -273,7 +274,10 @@ if (!$savedToDb && !$jsonWriteSuccess) {
 }
 
 // 9. Send Email Notifications
-$resetUrl = "http://localhost:3000/change-password?email=" . urlencode($email);
+// Public site URL (frontend). Configured via SITE_URL in .env; defaults to local dev.
+$siteUrl = isset($_ENV['SITE_URL']) ? rtrim(trim($_ENV['SITE_URL']), '/') : 'http://localhost:3000';
+$resetUrl = $siteUrl . "/change-password?email=" . urlencode($email);
+$loginUrl = $siteUrl . "/login";
 
 $emailBody = "
 <!DOCTYPE html>
@@ -338,7 +342,7 @@ $emailBody = "
         <div class='info-box' style='border-color: rgba(124, 58, 237, 0.3);'>
             <div class='info-row'>
                 <div class='label'>Dashboard Link:</div>
-                <div class='value'><a href='http://localhost:3000/login' style='color: #06b6d4;'>http://localhost:3000/login</a></div>
+                <div class='value'><a href='{$loginUrl}' style='color: #06b6d4;'>{$loginUrl}</a></div>
             </div>
             <div class='info-row'>
                 <div class='label'>Username:</div>
@@ -351,7 +355,7 @@ $emailBody = "
         </div>
         
         <div class='btn-wrapper'>
-            <a href='http://localhost:3000/login' class='btn'>Log In to Dashboard</a>
+            <a href='{$loginUrl}' class='btn'>Log In to Dashboard</a>
         </div>
         
         <p style='text-align: center; margin-bottom: 25px;'>
@@ -388,20 +392,21 @@ $emailSent = sendMail($email, "RoboNexus Onboarding: Confirm Registration & Cred
 $adminEmail = isset($_ENV['SMTP_TO_ADMIN']) ? trim($_ENV['SMTP_TO_ADMIN']) : '';
 if (!empty($adminEmail)) {
     $adminBody = "
-    <h2>New Contractor Onboarding Payment (₹800.00)</h2>
-    <p>A new user has completed the onboarding flow and uploaded a payment screenshot.</p>
+    <h2>New Contractor Onboarding Payment (Razorpay)</h2>
+    <p>A new user has completed the onboarding flow and paid via the Razorpay gateway on aimstorm.in.</p>
     <ul>
         <li><strong>Name:</strong> " . htmlspecialchars($fullName) . "</li>
         <li><strong>Email:</strong> " . htmlspecialchars($email) . "</li>
         <li><strong>Phone:</strong> " . htmlspecialchars($phone) . "</li>
         <li><strong>Registered ID (Worker ID):</strong> {$registerId}</li>
         <li><strong>Order ID:</strong> {$orderId}</li>
-        <li><strong>Total Paid:</strong> ₹800.00</li>
+        <li><strong>Razorpay Payment ID:</strong> {$razorpayPaymentId}</li>
+        <li><strong>Total Paid:</strong> ₹" . htmlspecialchars($paymentAmount) . "</li>
         <li><strong>Bank Name:</strong> " . htmlspecialchars($bankName) . "</li>
         <li><strong>Account Number:</strong> " . htmlspecialchars($accountNumber) . "</li>
         <li><strong>IFSC Code:</strong> " . htmlspecialchars($ifscCode) . "</li>
     </ul>
-    <p>Please review the uploaded receipt screenshot in the admin control panel.</p>
+    <p>You can review this payment under the Payments menu in the admin control panel.</p>
     ";
     sendMail($adminEmail, "[NEW ONBOARDING ORDER] " . $orderId, $adminBody, true);
 }
@@ -413,6 +418,7 @@ echo json_encode([
     "message" => "Onboarding and payment logged successfully. Credentials sent via email.",
     "registerId" => $registerId,
     "orderId" => $orderId,
+    "paymentId" => $razorpayPaymentId,
     "emailSent" => $emailSent,
     "credentials" => [
         "username" => $email,

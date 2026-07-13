@@ -1,0 +1,8 @@
+# RoboNexus static export (Next.js) on Apache / Hostinger.
+# Serves the exported HTML; leaves backend/ and admin/ PHP folders untouched.
+
+Options -MultiViews
+DirectoryIndex index.html
+
+# Friendly 404 from the export
+ErrorDocument 404 /404.html

@@ -47,7 +47,10 @@ $registrations = [];
 $orders = [];
 $contacts = [];
 $uploads = [];
+$payments = [];
 $totalRevenue = 0;
+$paymentsTotal = 0;
+$userCount = 0;
 
 if ($isLoggedIn) {
     if ($pdo !== null) {
@@ -135,6 +138,34 @@ if ($isLoggedIn) {
         } catch (PDOException $e) {
             error_log("Failed to query user_uploads from DB: " . $e->getMessage());
         }
+
+        try {
+            $stmt = $pdo->query("SELECT * FROM `payments` ORDER BY `timestamp` DESC");
+            $dbPayments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($dbPayments as $row) {
+                $payments[] = [
+                    'paymentId' => $row['payment_id'],
+                    'orderRef' => $row['order_ref'],
+                    'razorpayOrderId' => isset($row['razorpay_order_id']) ? $row['razorpay_order_id'] : '',
+                    'registerId' => isset($row['register_id']) ? $row['register_id'] : '',
+                    'name' => $row['customer_name'],
+                    'email' => $row['customer_email'],
+                    'phone' => $row['customer_phone'],
+                    'amount' => $row['amount'],
+                    'status' => $row['status'],
+                    'timestamp' => $row['timestamp']
+                ];
+                $paymentsTotal += (float)preg_replace('/[^\d\.]/', '', $row['amount']);
+            }
+        } catch (PDOException $e) {
+            error_log("Failed to query payments from DB: " . $e->getMessage());
+        }
+
+        try {
+            $userCount = (int)$pdo->query("SELECT COUNT(*) FROM `users`")->fetchColumn();
+        } catch (PDOException $e) {
+            error_log("Failed to count users from DB: " . $e->getMessage());
+        }
     } else {
         // Fallback to JSON files in backend if Database is offline
         $registrationsFile = __DIR__ . '/../backend/registrations.json';
@@ -197,6 +228,31 @@ if ($isLoggedIn) {
                 if (!isset($u['adminFeedback']) && isset($u['admin_feedback'])) $u['adminFeedback'] = $u['admin_feedback'];
                 if (!isset($u['durationHours']) && isset($u['duration_hours'])) $u['durationHours'] = $u['duration_hours'];
             }
+            unset($u);
+        }
+
+        // Payments fallback
+        $paymentsFile = __DIR__ . '/../backend/payments.json';
+        if (file_exists($paymentsFile)) {
+            $payments = json_decode(file_get_contents($paymentsFile), true);
+            if (!is_array($payments)) {
+                $payments = [];
+            }
+            usort($payments, function($a, $b) {
+                return strcmp($b['timestamp'], $a['timestamp']);
+            });
+            foreach ($payments as $p) {
+                if (isset($p['amount'])) {
+                    $paymentsTotal += (float)preg_replace('/[^\d\.]/', '', $p['amount']);
+                }
+            }
+        }
+
+        // User count fallback
+        $usersFile = __DIR__ . '/../backend/users.json';
+        if (file_exists($usersFile)) {
+            $usersData = json_decode(file_get_contents($usersFile), true);
+            $userCount = is_array($usersData) ? count($usersData) : 0;
         }
     }
 }
@@ -872,6 +928,26 @@ if ($isLoggedIn) {
                         <span class="stat-val"><?php echo count($contacts); ?></span>
                     </div>
                 </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon" style="background-color: rgba(6, 182, 212, 0.15); border: 1px solid rgba(6, 182, 212, 0.3); color: #06b6d4;">
+                        <i class="fa-solid fa-user-check"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">Registered Users</span>
+                        <span class="stat-val"><?php echo $userCount; ?></span>
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon" style="background-color: rgba(124, 58, 237, 0.15); border: 1px solid rgba(124, 58, 237, 0.3); color: #7c3aed;">
+                        <i class="fa-solid fa-indian-rupee-sign"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">Razorpay Collected (<?php echo count($payments); ?>)</span>
+                        <span class="stat-val">₹<?php echo number_format($paymentsTotal, 2); ?></span>
+                    </div>
+                </div>
             </div>
 
             <!-- Tab Headers Navigation -->
@@ -879,6 +955,10 @@ if ($isLoggedIn) {
                 <button class="tab-btn active" onclick="switchTab('contractors')">
                     <i class="fa-solid fa-id-card-clip" style="margin-right: 0.5rem;"></i>
                     Contractor Registers
+                </button>
+                <button class="tab-btn" onclick="switchTab('payments')">
+                    <i class="fa-solid fa-credit-card" style="margin-right: 0.5rem;"></i>
+                    Payments
                 </button>
                 <button class="tab-btn" onclick="switchTab('orders')">
                     <i class="fa-solid fa-receipt" style="margin-right: 0.5rem;"></i>
@@ -937,6 +1017,65 @@ if ($isLoggedIn) {
                             <div class="empty-state">
                                 <i class="fa-solid fa-folder-open"></i>
                                 <p>No contractor registrations recorded in the database queue.</p>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content: Razorpay Payments -->
+            <div id="tab-payments" class="tab-content">
+                <div class="table-card">
+                    <div class="table-responsive">
+                        <?php if (count($payments) > 0): ?>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Payment ID</th>
+                                        <th>Worker / Register ID</th>
+                                        <th>Customer</th>
+                                        <th>Email</th>
+                                        <th>Phone</th>
+                                        <th>Amount</th>
+                                        <th>Status</th>
+                                        <th>Paid At</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($payments as $pay): ?>
+                                        <tr>
+                                            <td>
+                                                <span class="badge-id"><?php echo htmlspecialchars($pay['paymentId']); ?></span>
+                                            </td>
+                                            <td>
+                                                <span class="badge-id"><?php echo htmlspecialchars(isset($pay['registerId']) ? $pay['registerId'] : ''); ?></span>
+                                            </td>
+                                            <td style="font-weight: 600; color: white;">
+                                                <?php echo htmlspecialchars($pay['name']); ?>
+                                            </td>
+                                            <td>
+                                                <a href="mailto:<?php echo htmlspecialchars($pay['email']); ?>" style="color: var(--violet); text-decoration: none;">
+                                                    <?php echo htmlspecialchars($pay['email']); ?>
+                                                </a>
+                                            </td>
+                                            <td><?php echo htmlspecialchars($pay['phone']); ?></td>
+                                            <td style="font-weight: 700; color: #4ade80;">₹<?php echo htmlspecialchars($pay['amount']); ?></td>
+                                            <td>
+                                                <span class="badge-id" style="color: #4ade80; background-color: rgba(74,222,128,0.1); border-color: rgba(74,222,128,0.2);">
+                                                    <?php echo htmlspecialchars($pay['status']); ?>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge-date"><?php echo htmlspecialchars($pay['timestamp']); ?></span>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php else: ?>
+                            <div class="empty-state">
+                                <i class="fa-solid fa-credit-card"></i>
+                                <p>No Razorpay payments recorded yet. Completed onboarding payments will appear here.</p>
                             </div>
                         <?php endif; ?>
                     </div>
@@ -1020,18 +1159,24 @@ if ($isLoggedIn) {
                                             <td>
                                                 <?php if (isset($order['paymentScreenshot']) && !empty($order['paymentScreenshot'])): ?>
                                                     <?php
-                                                    $screenshotPath = htmlspecialchars($order['paymentScreenshot']);
-                                                    // Map relative upload directories correctly to backend
-                                                    if (strpos($screenshotPath, './') === 0) {
-                                                        $viewLink = '../backend/' . substr($screenshotPath, 2);
-                                                    } else {
-                                                        $viewLink = '../backend/' . $screenshotPath;
-                                                    }
+                                                    $paymentRef = $order['paymentScreenshot'];
                                                     ?>
-                                                    <a href="<?php echo $viewLink; ?>" target="_blank" class="btn-view-screenshot">
-                                                        <i class="fa-solid fa-receipt"></i>
-                                                        View Receipt
-                                                    </a>
+                                                    <?php if (strpos($paymentRef, 'pay_') === 0): ?>
+                                                        <span class="badge-id"><i class="fa-solid fa-credit-card"></i> <?php echo htmlspecialchars($paymentRef); ?></span>
+                                                    <?php else: ?>
+                                                        <?php
+                                                        $screenshotPath = htmlspecialchars($paymentRef);
+                                                        if (strpos($screenshotPath, './') === 0) {
+                                                            $viewLink = '../backend/' . substr($screenshotPath, 2);
+                                                        } else {
+                                                            $viewLink = '../backend/' . $screenshotPath;
+                                                        }
+                                                        ?>
+                                                        <a href="<?php echo $viewLink; ?>" target="_blank" class="btn-view-screenshot">
+                                                            <i class="fa-solid fa-receipt"></i>
+                                                            View Receipt
+                                                        </a>
+                                                    <?php endif; ?>
                                                 <?php else: ?>
                                                     <span style="color: var(--text-muted); font-size: 0.8rem; font-style: italic;">No Receipt</span>
                                                 <?php endif; ?>
@@ -1225,14 +1370,17 @@ if ($isLoggedIn) {
                     if (tabName === 'contractors') {
                         buttons[0].classList.add('active');
                         document.getElementById('tab-contractors').classList.add('active');
-                    } else if (tabName === 'orders') {
+                    } else if (tabName === 'payments') {
                         buttons[1].classList.add('active');
+                        document.getElementById('tab-payments').classList.add('active');
+                    } else if (tabName === 'orders') {
+                        buttons[2].classList.add('active');
                         document.getElementById('tab-orders').classList.add('active');
                     } else if (tabName === 'contacts') {
-                        buttons[2].classList.add('active');
+                        buttons[3].classList.add('active');
                         document.getElementById('tab-contacts').classList.add('active');
                     } else if (tabName === 'uploads') {
-                        buttons[3].classList.add('active');
+                        buttons[4].classList.add('active');
                         document.getElementById('tab-uploads').classList.add('active');
                     }
                 }

@@ -1,33 +1,48 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 const framerMotion = motion;
 const FramerAnimatePresence = AnimatePresence;
-import Image from "next/image";
-import { 
-  ShieldCheck, 
+import {
   CheckCircle,
   ArrowRight,
   Lock,
   X,
   AlertCircle,
-  Upload,
   User,
   Phone,
   MapPin,
-  DollarSign,
   Building,
   CreditCard,
-  Hash
+  Hash,
+  ShieldCheck,
 } from "lucide-react";
 import ScrollReveal from "@/components/animations/ScrollReveal";
 
+// Razorpay gateway is hosted + verified on the aimstorm.in domain. RoboNexus
+// hands the user off to it, then the user is redirected back here on success.
+const PAYMENT_URL =
+  process.env.NEXT_PUBLIC_PAYMENT_URL || "https://aimstorm.in/payment.php";
+const ONBOARDING_AMOUNT = 800; // ₹300 onboarding + ₹500 hardware
+const PENDING_KEY = "robonexus_pending_registration";
+
+interface RegistrationForm {
+  fullName: string;
+  email: string;
+  phone: string;
+  address: string;
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  consent: boolean;
+}
+
 export default function Register() {
-  // Step tracker: 1 = Registration details, 2 = Payment receipt upload, 3 = Success Credentials
+  // Step tracker: 1 = Registration details, 2 = Pay, 3 = Success Credentials
   const [step, setStep] = useState(1);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<RegistrationForm>({
     fullName: "",
     email: "",
     phone: "",
@@ -39,38 +54,36 @@ export default function Register() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [screenshot, setScreenshot] = useState<File | null>(null);
-  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  
+
   // Successful response details
   const [registerId, setRegisterId] = useState("");
-  const [orderId, setOrderId] = useState("");
+  const [paymentId, setPaymentId] = useState("");
   const [tempCredentials, setTempCredentials] = useState({ username: "", password: "" });
-  
+
   const [showTermsModal, setShowTermsModal] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showPaidPopup, setShowPaidPopup] = useState(false);
 
   const validateStep1 = () => {
     const tempErrors: Record<string, string> = {};
     if (!formData.fullName.trim()) tempErrors.fullName = "Full Legal Name is required";
-    
+
     if (!formData.email.trim()) {
       tempErrors.email = "Email is required";
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       tempErrors.email = "Email is invalid";
     }
-    
+
     if (!formData.phone.trim()) {
       tempErrors.phone = "Phone number is required";
     }
-    
+
     if (!formData.address.trim()) tempErrors.address = "Complete Delivery Address is required";
     if (!formData.bankName.trim()) tempErrors.bankName = "Bank Name is required";
     if (!formData.accountNumber.trim()) tempErrors.accountNumber = "Account Number is required";
     if (!formData.ifscCode.trim()) tempErrors.ifscCode = "IFSC Code is required";
-    
+
     if (!formData.consent) {
       tempErrors.consent = "You must agree to the contractor terms and conditions to proceed";
     }
@@ -82,13 +95,12 @@ export default function Register() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     const val = type === "checkbox" ? (e.target as HTMLInputElement).checked : value;
-    
+
     setFormData((prev) => ({
       ...prev,
       [name]: val,
     }));
-    
-    // Clear error
+
     if (errors[name]) {
       setErrors((prev) => {
         const next = { ...prev };
@@ -105,91 +117,120 @@ export default function Register() {
     }
   };
 
-  // Drag & drop payment screenshot handlers
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setScreenshot(file);
-      setScreenshotPreview(URL.createObjectURL(file));
-      setSubmitError(null);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      if (file.type.startsWith("image/") || file.type === "application/pdf") {
-        setScreenshot(file);
-        setScreenshotPreview(URL.createObjectURL(file));
-        setSubmitError(null);
-      } else {
-        setSubmitError("Please upload an image file (PNG, JPG, WEBP) or a PDF.");
-      }
-    }
-  };
-
-  const triggerSelectFile = () => {
-    fileInputRef.current?.click();
-  };
-
-  // Submit complete registration and order details together
-  const handleOnboardingSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Redirect to the Razorpay gateway hosted on aimstorm.in.
+  const handlePayNow = () => {
     setSubmitError(null);
+    // Persist the entered details so we can finalize registration when the
+    // gateway redirects the user back to /register.
+    sessionStorage.setItem(PENDING_KEY, JSON.stringify(formData));
 
-    if (!screenshot) {
-      setSubmitError("Please upload your payment receipt screenshot to complete onboarding.");
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    const formDataObj = new FormData();
-    formDataObj.append("fullName", formData.fullName);
-    formDataObj.append("email", formData.email);
-    formDataObj.append("phone", formData.phone);
-    formDataObj.append("address", formData.address);
-    formDataObj.append("bankName", formData.bankName);
-    formDataObj.append("accountNumber", formData.accountNumber);
-    formDataObj.append("ifscCode", formData.ifscCode);
-    formDataObj.append("payment_screenshot", screenshot);
-
-    try {
-      const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost/robonexus/backend").replace(/\/$/, "");
-      const fullUrl = `${apiBaseUrl}/register.php`;
-      console.log("Attempting to fetch from:", fullUrl);
-      
-      const response = await fetch(fullUrl, {
-        method: "POST",
-        body: formDataObj,
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.status === "success") {
-        setRegisterId(data.registerId);
-        setOrderId(data.orderId);
-        setTempCredentials({
-          username: data.credentials.username,
-          password: data.credentials.password
-        });
-        setStep(3);
-      } else {
-        setSubmitError(data.message || "Failed to submit onboarding payment. Please verify details.");
-      }
-    } catch (err) {
-      console.error("Connection error to PHP API:", err);
-      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost/robonexus/backend";
-      setSubmitError(`Failed to connect to registration server at ${apiBaseUrl}. Please verify that XAMPP Apache is running and the backend folder exists.`);
-    } finally {
-      setIsSubmitting(false);
-    }
+    const returnUrl = `${window.location.origin}/register`;
+    const params = new URLSearchParams({
+      amount: String(ONBOARDING_AMOUNT),
+      name: formData.fullName,
+      email: formData.email,
+      phone: formData.phone,
+      return_url: returnUrl,
+    });
+    window.location.href = `${PAYMENT_URL}?${params.toString()}`;
   };
+
+  // Finalize onboarding after a verified payment (create account + record payment).
+  const finalizeRegistration = useCallback(
+    async (
+      stored: RegistrationForm,
+      rpPaymentId: string,
+      rpOrderId: string,
+      amount: string
+    ) => {
+      setIsSubmitting(true);
+      setSubmitError(null);
+
+      const body = new FormData();
+      body.append("fullName", stored.fullName);
+      body.append("email", stored.email);
+      body.append("phone", stored.phone);
+      body.append("address", stored.address);
+      body.append("bankName", stored.bankName);
+      body.append("accountNumber", stored.accountNumber);
+      body.append("ifscCode", stored.ifscCode);
+      body.append("razorpayPaymentId", rpPaymentId);
+      body.append("razorpayOrderId", rpOrderId);
+      body.append("paymentAmount", amount || String(ONBOARDING_AMOUNT));
+
+      try {
+        const apiBaseUrl = (
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost/robonexus/backend"
+        ).replace(/\/$/, "");
+        const response = await fetch(`${apiBaseUrl}/register.php`, {
+          method: "POST",
+          body,
+        });
+        const data = await response.json();
+
+        if (response.ok && data.status === "success") {
+          setFormData(stored);
+          setRegisterId(data.registerId);
+          setPaymentId(data.paymentId || rpPaymentId);
+          setTempCredentials({
+            username: data.credentials.username,
+            password: data.credentials.password,
+          });
+          setStep(3);
+          setShowPaidPopup(true);
+        } else {
+          setSubmitError(
+            data.message || "Payment succeeded but onboarding could not be completed."
+          );
+          setStep(2);
+        }
+      } catch {
+        setSubmitError(
+          "Payment succeeded but we could not reach the onboarding server. Please contact support with your payment ID."
+        );
+        setStep(2);
+      } finally {
+        setIsSubmitting(false);
+        sessionStorage.removeItem(PENDING_KEY);
+      }
+    },
+    []
+  );
+
+  // Detect the redirect back from the aimstorm.in Razorpay gateway.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("payment_status");
+    if (!status) return;
+
+    // Clean the query string so a refresh doesn't re-trigger this.
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    if (status === "success") {
+      const rpPaymentId = params.get("razorpay_payment_id") || "";
+      const rpOrderId = params.get("razorpay_order_id") || "";
+      const amount = params.get("amount") || String(ONBOARDING_AMOUNT);
+      const raw = sessionStorage.getItem(PENDING_KEY);
+      if (raw && rpPaymentId) {
+        try {
+          const stored = JSON.parse(raw) as RegistrationForm;
+          finalizeRegistration(stored, rpPaymentId, rpOrderId, amount);
+        } catch {
+          setSubmitError("Could not read your registration details. Please try again.");
+          setStep(2);
+        }
+      } else {
+        setSubmitError("Your session expired. Please re-enter your details and pay again.");
+        setStep(1);
+      }
+    } else if (status === "cancelled") {
+      setSubmitError("Payment was cancelled. You can retry whenever you're ready.");
+      setStep(2);
+    } else {
+      setSubmitError("Payment could not be completed. Please try again.");
+      setStep(2);
+    }
+  }, [finalizeRegistration]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
@@ -238,14 +279,14 @@ export default function Register() {
                 transition={{ duration: 0.3 }}
               >
                 <form onSubmit={handleNextToPayment} className="flex flex-col gap-6 relative z-10">
-                  
+
                   {/* Section 1.1: Contact Details */}
                   <div>
                     <h3 className="text-xs font-bold font-mono text-brand-cyan uppercase tracking-wider mb-4 border-b border-brand-card-border/60 pb-1.5 flex items-center gap-2">
                       <User className="h-4 w-4 text-brand-cyan" />
                       01. Personal Information & Location
                     </h3>
-                    
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-2xs font-semibold text-gray-300 uppercase tracking-wider mb-1.5">
@@ -449,7 +490,7 @@ export default function Register() {
 
                     {/* Pricing notice in small light letters */}
                     <p className="text-3xs text-gray-500 leading-relaxed font-mono mt-1">
-                      Onboarding and activation requires a combined hardware co-processor setup and administrative license fee: Onboarding Activation Fee (₹300.00) + Nexus-Core Model-X Hardware Device (₹500.00) = Total payable amount is ₹800.00. Account credentials will be issued upon verifying receipt screenshot submission in Step 2.
+                      Onboarding and activation requires a combined hardware co-processor setup and administrative license fee: Onboarding Activation Fee (₹300.00) + Nexus-Core Model-X Hardware Device (₹500.00) = Total payable amount is ₹800.00. Account credentials will be issued upon successful Razorpay payment in Step 2.
                     </p>
                   </div>
 
@@ -470,7 +511,7 @@ export default function Register() {
               </motion.div>
             )}
 
-            {/* STEP 2: Payment Receipt Uploader */}
+            {/* STEP 2: Razorpay Payment Hand-off */}
             {step === 2 && (
               <motion.div
                 key="step2"
@@ -479,13 +520,15 @@ export default function Register() {
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <form onSubmit={handleOnboardingSubmit} className="flex flex-col gap-6 relative z-10 max-w-2xl mx-auto">
+                <div className="flex flex-col gap-6 relative z-10 max-w-2xl mx-auto">
                   <div className="text-center">
                     <h3 className="text-sm font-bold font-mono text-brand-cyan uppercase tracking-wider mb-2">
-                      Secure Billing checkout & Setup
+                      Secure Billing Checkout
                     </h3>
                     <p className="text-xs text-gray-400 max-w-md mx-auto">
-                      Scan the QR code to transfer ₹800.00 for onboarding setup, then upload the receipt screenshot.
+                      You&apos;ll be redirected to our secure Razorpay gateway on
+                      <span className="text-white font-semibold"> aimstorm.in </span>
+                      to pay ₹800.00. After payment you&apos;ll return here automatically.
                     </p>
                   </div>
 
@@ -495,80 +538,28 @@ export default function Register() {
                       Order Summary details
                     </h4>
                     <div className="flex justify-between text-xs py-1">
-                      <span className="text-gray-400">Onboarding & Telemetry Activation Fee</span>
-                      <span className="text-white font-mono">₹299.00</span>
+                      <span className="text-gray-400">Onboarding &amp; Telemetry Activation Fee</span>
+                      <span className="text-white font-mono">₹300.00</span>
                     </div>
                     <div className="flex justify-between text-xs py-1">
-                      <span className="text-gray-400">ABS+ Head Mount Unit</span>
-                      <span className="text-white font-mono">₹400.00</span>
+                      <span className="text-gray-400">Nexus-Core Model-X Hardware Device</span>
+                      <span className="text-white font-mono">₹500.00</span>
                     </div>
                     <div className="flex justify-between text-sm py-2 border-t border-brand-card-border/50 mt-2 font-bold">
                       <span className="text-brand-cyan">Total Amount Payable</span>
-                      <span className="text-brand-cyan font-mono">₹699.00</span>
+                      <span className="text-brand-cyan font-mono">₹800.00</span>
                     </div>
                   </div>
 
-                  {/* QR Code Scan */}
-                  <div className="flex justify-center items-center py-4 bg-brand-dark/60 rounded-2xl border border-brand-card-border">
-                    <div className="relative w-44 h-44 rounded-xl overflow-hidden bg-white p-2">
-                      <Image
-                        src="/qr_code_payment.png"
-                        alt="RoboNexus Payment QR"
-                        width={176}
-                        height={176}
-                        className="object-contain"
-                      />
+                  {/* Razorpay trust panel */}
+                  <div className="flex items-center gap-3 bg-brand-dark/40 border border-brand-card-border/50 rounded-2xl p-4">
+                    <div className="h-10 w-10 rounded-full bg-brand-cyan/10 flex items-center justify-center border border-brand-cyan/25 text-brand-cyan shrink-0">
+                      <ShieldCheck className="h-5 w-5" />
                     </div>
-                  </div>
-
-                  {/* File Uploader */}
-                  <div className="flex flex-col gap-2">
-                    <label className="text-2xs font-bold font-mono text-gray-400 uppercase tracking-wider">
-                      Upload Payment screenshot / PDF
-                    </label>
-                    <div
-                      onDragOver={handleDragOver}
-                      onDrop={handleDrop}
-                      onClick={triggerSelectFile}
-                      className="border-2 border-dashed border-brand-card-border hover:border-brand-cyan/60 rounded-2xl p-8 text-center bg-brand-dark/30 hover:bg-brand-dark/50 cursor-pointer transition-all flex flex-col items-center justify-center gap-2.5 group"
-                    >
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileChange}
-                        accept="image/*,application/pdf"
-                        className="hidden"
-                      />
-                      
-                      <div className="h-11 w-11 rounded-full bg-brand-cyan/10 flex items-center justify-center border border-brand-cyan/20 group-hover:scale-105 transition-transform text-brand-cyan">
-                        <Upload className="h-5 w-5" />
-                      </div>
-
-                      {screenshot ? (
-                        <div className="flex flex-col items-center gap-1.5">
-                          <span className="text-xs font-semibold text-white font-mono line-clamp-1">
-                            {screenshot.name}
-                          </span>
-                          <span className="text-3xs text-gray-500 font-mono">
-                            {round(screenshot.size / 1024, 1)} KB | Click to Replace
-                          </span>
-                          {screenshotPreview && screenshot.type.startsWith("image/") && (
-                            <div className="relative h-20 w-32 rounded-lg overflow-hidden border border-brand-card-border mt-2 bg-brand-dark">
-                              <Image src={screenshotPreview} alt="Preview" fill className="object-contain" />
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div>
-                          <span className="text-xs font-bold text-white block">
-                            Drag and Drop screenshot here
-                          </span>
-                          <span className="text-2xs text-gray-400 block mt-1 font-mono">
-                            or click to browse local storage (PNG, JPG, PDF up to 10MB)
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                    <p className="text-2xs text-gray-400 leading-relaxed">
+                      Payments are processed by <span className="text-white font-semibold">Razorpay</span> on
+                      the verified aimstorm.in domain. RoboNexus never sees your card or UPI details.
+                    </p>
                   </div>
 
                   {/* Submission Status Alerts */}
@@ -579,7 +570,14 @@ export default function Register() {
                     </div>
                   )}
 
-                  {/* Navigation and Submit Buttons */}
+                  {isSubmitting && (
+                    <div className="bg-brand-cyan/10 border border-brand-cyan/25 p-4 rounded-xl flex gap-3 text-brand-cyan text-xs items-center">
+                      <span className="h-4 w-4 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin shrink-0" />
+                      Verifying payment and provisioning your account...
+                    </div>
+                  )}
+
+                  {/* Navigation and Pay Buttons */}
                   <div className="flex gap-4">
                     <button
                       type="button"
@@ -593,24 +591,16 @@ export default function Register() {
                       disabled={isSubmitting}
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.99 }}
-                      type="submit"
-                      className="w-2/3 relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-purple to-brand-indigo py-3.5 font-bold text-white shadow-lg cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      type="button"
+                      onClick={handlePayNow}
+                      className="w-2/3 relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-cyan to-brand-purple py-3.5 font-bold text-white shadow-lg cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      {isSubmitting ? (
-                        <>
-                          <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
-                          Logging Onboarding Payment...
-                        </>
-                      ) : (
-                        <>
-                          Submit & Complete Onboarding
-                          <CheckCircle className="h-4.5 w-4.5" />
-                        </>
-                      )}
+                      Pay ₹800.00 with Razorpay
+                      <ArrowRight className="h-4.5 w-4.5" />
                     </framerMotion.button>
                   </div>
 
-                </form>
+                </div>
               </motion.div>
             )}
 
@@ -626,13 +616,13 @@ export default function Register() {
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-cyan/20 border border-brand-cyan/45 mb-6 text-brand-cyan">
                   <CheckCircle className="h-8 w-8" />
                 </div>
-                
+
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
                   Onboarding Credentials Issued
                 </h2>
-                
+
                 <p className="text-gray-300 mt-3 text-xs sm:text-sm leading-relaxed">
-                  Thank you! Your payment screenshot has been uploaded. Your profile credentials have been successfully provisioned. We have also sent a confirmation credentials copy to your registered email address.
+                  Thank you! Your Razorpay payment was successful. Your profile credentials have been successfully provisioned. We have also sent a confirmation credentials copy to your registered email address.
                 </p>
 
                 {/* Secure Credential Display Box */}
@@ -640,11 +630,18 @@ export default function Register() {
                   <div className="absolute top-0 right-0 p-3 bg-brand-cyan/10 rounded-bl-xl border-l border-b border-brand-cyan/20 text-3xs font-bold font-mono text-brand-cyan uppercase tracking-widest">
                     Telemetry Credentials
                   </div>
-                  
+
                   <div className="flex justify-between items-center border-b border-brand-card-border pb-3 mb-4 mt-2">
                     <span className="text-3xs font-mono text-gray-500 font-semibold uppercase">Profile Queue Ref</span>
                     <span className="text-xs font-mono font-bold text-brand-cyan">{registerId}</span>
                   </div>
+
+                  {paymentId && (
+                    <div className="flex justify-between items-center border-b border-brand-card-border pb-3 mb-4">
+                      <span className="text-3xs font-mono text-gray-500 font-semibold uppercase">Payment ID</span>
+                      <span className="text-xs font-mono font-bold text-brand-cyan">{paymentId}</span>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-3 font-mono text-xs">
                     <div className="flex justify-between items-center bg-[#15171c] p-2.5 rounded-xl border border-brand-card-border/50">
@@ -682,6 +679,48 @@ export default function Register() {
         </div>
       </ScrollReveal>
 
+      {/* PAYMENT SUCCESS POPUP */}
+      <FramerAnimatePresence>
+        {showPaidPopup && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="rounded-2xl w-full max-w-sm p-7 relative shadow-2xl bg-[#15171c] border border-brand-cyan/30 text-center"
+            >
+              <button
+                onClick={() => setShowPaidPopup(false)}
+                className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-brand-card-border/60 transition-colors cursor-pointer"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
+
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-cyan/20 border border-brand-cyan/45 mb-4 text-brand-cyan">
+                <CheckCircle className="h-7 w-7" />
+              </div>
+
+              <h3 className="text-xl font-extrabold text-white">Payment Successful</h3>
+              <p className="text-gray-400 text-xs mt-2 leading-relaxed">
+                Your onboarding payment of ₹800.00 has been received and verified.
+              </p>
+
+              <div className="bg-brand-dark/50 border border-brand-card-border/60 rounded-xl p-3 mt-5 text-left">
+                <span className="text-3xs font-mono text-gray-500 uppercase tracking-widest">Payment ID</span>
+                <p className="text-sm font-mono font-bold text-brand-cyan break-all mt-0.5">{paymentId}</p>
+              </div>
+
+              <button
+                onClick={() => setShowPaidPopup(false)}
+                className="w-full mt-6 rounded-xl bg-gradient-to-r from-brand-cyan to-brand-purple py-3 text-sm font-bold text-white cursor-pointer transition-all"
+              >
+                View My Credentials
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </FramerAnimatePresence>
+
       {/* Terms and Conditions Overlay Modal */}
       <FramerAnimatePresence>
         {showTermsModal && (
@@ -702,15 +741,15 @@ export default function Register() {
               <h3 className="text-base font-bold text-white mb-3">
                 Contractor Terms & Conditions
               </h3>
-              
+
               <div className="max-h-64 overflow-y-auto text-xs text-gray-400 leading-relaxed space-y-3 pr-2 scrollbar-thin scrollbar-thumb-brand-purple">
                 <p className="font-bold text-white font-mono">ROBONEXUS CONTRACTOR SERVICE AGREEMENT</p>
                 <p className="text-3xs text-gray-500">Last Updated: June 30, 2026</p>
-                
+
                 <p>
                   This Service Agreement (&quot;Agreement&quot;) is made effective upon registration between the contracting agent (&quot;Contractor&quot;) and RoboNexus Inc. (&quot;Company&quot;).
                 </p>
-                
+
                 <h4 className="font-semibold text-white mt-2">Terms & Conditions</h4>
                 <ol className="list-decimal pl-4 space-y-2">
                   <li>The ₹800 paid is a combined Registration & Product Fee and is non-refundable under any circumstances.</li>
@@ -740,10 +779,4 @@ export default function Register() {
       </FramerAnimatePresence>
     </div>
   );
-}
-
-// Inline round helper
-function round(value: number, precision: number) {
-  const multiplier = Math.pow(10, precision || 0);
-  return Math.round(value * multiplier) / multiplier;
 }

@@ -1,0 +1,10 @@
+{
+  "name": "robonexus-admin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RoboNexus PHP admin panel (served with the PHP built-in dev server via XAMPP's PHP).",
+  "scripts": {
+    "start": "/Applications/XAMPP/bin/php -S localhost:8001",
+    "start:php": "php -S localhost:8001"
+  }
+}

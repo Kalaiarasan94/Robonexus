@@ -1,0 +1,12 @@
+# RoboNexus backend — block direct access to secrets and data files.
+# PHP endpoints keep working; only raw files are denied.
+
+# Never expose the environment file
+<FilesMatch "^\.env">
+  Require all denied
+</FilesMatch>
+
+# Never allow the JSON data stores (users.json holds password hashes) to be downloaded
+<FilesMatch "\.(json|log)$">
+  Require all denied
+</FilesMatch>

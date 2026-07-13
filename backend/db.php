@@ -98,6 +98,21 @@ try {
         `timestamp` DATETIME NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
+    // Table 6: razorpay payments captured via the aimstorm.in gateway
+    $pdo->exec("CREATE TABLE IF NOT EXISTS `payments` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `payment_id` VARCHAR(100) NOT NULL,
+        `order_ref` VARCHAR(100) NOT NULL,
+        `razorpay_order_id` VARCHAR(100) NOT NULL DEFAULT '',
+        `register_id` VARCHAR(50) NOT NULL DEFAULT '',
+        `customer_name` VARCHAR(255) NOT NULL DEFAULT '',
+        `customer_email` VARCHAR(255) NOT NULL DEFAULT '',
+        `customer_phone` VARCHAR(50) NOT NULL DEFAULT '',
+        `amount` VARCHAR(50) NOT NULL DEFAULT '',
+        `status` VARCHAR(50) NOT NULL DEFAULT 'paid',
+        `timestamp` DATETIME NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
     // Check & Alter tables if columns are missing
     // 1. Alter orders to add customer_email
     try {
