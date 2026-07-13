@@ -1,0 +1,40 @@
+[
+    {
+        "registerId": "RNX-2025-516686",
+        "fullName": "Hal Finney",
+        "email": "hal@finney.org",
+        "phone": "+1 555-808-2009",
+        "city": "Santa Barbara",
+        "state": "CA",
+        "timestamp": "2026-06-25 14:27:42"
+    },
+    {
+        "registerId": "RNX-2025-654666",
+        "fullName": "tvvyferdtrgwsyn",
+        "email": "nothing@gmail.com",
+        "phone": "12345678",
+        "city": "tvjik",
+        "state": "kijuhygt",
+        "timestamp": "2026-06-30 09:38:06"
+    },
+    {
+        "registerId": "RNX-2025-766291",
+        "fullName": "test",
+        "email": "test@gmail.com",
+        "phone": "123456789",
+        "city": "eyrtyui",
+        "state": "hgfds",
+        "timestamp": "2026-06-30 10:30:51"
+    },
+    {
+        "registerId": "RNX-2026-667055",
+        "fullName": "test",
+        "email": "test@gmail.com",
+        "phone": "123456789",
+        "address": "asdfghjkl",
+        "bankName": "sbi",
+        "accountNumber": "012345678",
+        "ifscCode": "ifscy789",
+        "timestamp": "2026-06-30 11:19:10"
+    }
+]

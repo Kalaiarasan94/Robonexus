@@ -1,0 +1,16 @@
+[
+    {
+        "name": "Test User",
+        "email": "test@example.com",
+        "subject": "telemetry",
+        "message": "This is a test message via curl.",
+        "timestamp": "2026-06-27 14:56:34"
+    },
+    {
+        "name": "Test Sender",
+        "email": "test@example.com",
+        "subject": "billing",
+        "message": "This is a test inquiry message.",
+        "timestamp": "2026-06-27 15:59:20"
+    }
+]

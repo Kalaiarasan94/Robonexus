@@ -1,0 +1,42 @@
+RoboNexus Project Technology Stack
+==================================
+
+This document outlines the technology stack, architecture, and dependencies used in the RoboNexus project.
+
+1. Frontend Architecture
+-----------------------
+- Framework: Next.js (v16.2.9)
+- Core Library: React (v19.2.4)
+- Programming Language: TypeScript (v5.x)
+- Styling: Tailwind CSS (v4.x) with PostCSS
+- Animations: Framer Motion (v12.40.0)
+- Iconography: Lucide React (v1.21.0)
+- Environment Variables Management: dotenv (v17.4.2)
+- Linting: ESLint (v9.x)
+
+2. Backend Architecture
+----------------------
+- Language: Native PHP (configured with CORS headers for frontend integration)
+- Database: MySQL
+  - Connected using PHP Data Objects (PDO) with charset utf8mb4.
+  - Features an automatic database and table creation schema in `backend/db.php`.
+- Fallback Storage (Graceful Degradation): 
+  - If the database connection fails, the system automatically falls back to JSON file storage (saving inquiries to `contacts.json` and registrations to `registrations.json`).
+- Core Backend Endpoints:
+  - `backend/config.php`: Configures environment variables, header response codes, and CORS policies.
+  - `backend/db.php`: Database connection manager and schema initializer.
+  - `backend/register.php`: Endpoint handling contractor registration requests.
+  - `backend/submit_contact.php`: Endpoint handling contact form submissions.
+  - `backend/submit_order.php`: Endpoint handling order checkouts and payment screenshots uploading.
+  - `backend/uploads/`: Directory storing uploaded payment screenshots.
+
+3. Admin Panel
+--------------
+- Implementation: Native PHP
+- Files: `admin/index.php`
+- Description: Multi-functional admin dashboard to view and manage contractor registrations, customer orders, contact submissions, and verify uploaded payment receipts.
+
+4. Server / Development Environment
+----------------------------------
+- Local Server Stack: XAMPP (Apache + MySQL/MariaDB)
+- Workspace Directory: `c:\xampp\htdocs\Boss`

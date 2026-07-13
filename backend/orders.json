@@ -1,0 +1,18 @@
+[
+    {
+        "orderId": "ORD-725F1-1782811150",
+        "timestamp": "2026-06-30 11:19:10",
+        "customer": {
+            "name": "test",
+            "phone": "123456789",
+            "email": "test@gmail.com",
+            "address": "asdfghjkl"
+        },
+        "product": {
+            "id": "prod-core-x",
+            "name": "Nexus-Core Model-X Hardware + Onboarding Bundle",
+            "price": "\u20b9800.00"
+        },
+        "paymentScreenshot": ".\/uploads\/receipt_1782811150_7968.png"
+    }
+]

@@ -1,0 +1,13 @@
+[
+    {
+        "email": "test@gmail.com",
+        "password": "$2y$10$Q3FTf9BT2wgLd4dJAmxzBOQ1QAUyCoUdGlkEohLsBoKShJmXmPMk.",
+        "name": "test",
+        "phone": "123456789",
+        "address": "asdfghjkl",
+        "bankName": "sbi",
+        "accountNumber": "012345678",
+        "ifscCode": "ifscy789",
+        "timestamp": "2026-06-30 11:19:10"
+    }
+]
