@@ -52,9 +52,7 @@ build/
 dist/
 
 # Environment files
-.env
-.env.local
-.env.*
+
 
 # Logs
 npm-debug.log*
