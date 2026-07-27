@@ -122,6 +122,23 @@ CREATE TABLE IF NOT EXISTS `admin_logs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
+-- ---------------------------------------------------------------------------
+-- 8. settings — runtime config toggled from the admin console.
+--    Currently holds `payment_mode` ('live' or 'test'), which decides whether
+--    onboarding charges the full fee or ₹1. Absent row = live.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `settings` (
+  `setting_key`   VARCHAR(64)  NOT NULL PRIMARY KEY,
+  `setting_value` VARCHAR(255) NOT NULL,
+  `updated_at`    DATETIME     NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Optional: pin the starting mode explicitly (it defaults to live anyway).
+-- INSERT INTO `settings` (`setting_key`, `setting_value`, `updated_at`)
+--   VALUES ('payment_mode', 'live', NOW())
+--   ON DUPLICATE KEY UPDATE `setting_value` = 'live', `updated_at` = NOW();
+
+
 -- ============================================================================
 -- UPGRADING AN OLDER DATABASE
 --

@@ -132,6 +132,13 @@ try {
         INDEX `idx_admin_logs_timestamp` (`timestamp`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
+    // Table 8: settings — runtime config toggled from the admin console
+    $pdo->exec("CREATE TABLE IF NOT EXISTS `settings` (
+        `setting_key` VARCHAR(64) NOT NULL PRIMARY KEY,
+        `setting_value` VARCHAR(255) NOT NULL,
+        `updated_at` DATETIME NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
     // Check & Alter tables if columns are missing
     // 1. Alter orders to add customer_email
     try {

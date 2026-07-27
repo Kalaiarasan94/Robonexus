@@ -24,7 +24,28 @@ import ScrollReveal from "@/components/animations/ScrollReveal";
 // hands the user off to it, then the user is redirected back here on success.
 const PAYMENT_URL =
   process.env.NEXT_PUBLIC_PAYMENT_URL || "https://aimstorm.in/payment.php";
-const ONBOARDING_AMOUNT = 649; // ₹300 onboarding + ₹349 hardware
+// Fallbacks only. The real figures come from backend/get_payment_config.php at
+// page load, so the admin console's Test/Live toggle takes effect immediately —
+// a baked-in constant could never respond to it in a static export.
+const ACTIVATION_FEE = 300;
+const HARDWARE_FEE = 349;
+const ONBOARDING_AMOUNT = ACTIVATION_FEE + HARDWARE_FEE;
+
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost/robonexus/backend"
+).replace(/\/$/, "");
+
+interface PaymentConfig {
+  mode: "test" | "live";
+  amount: number;
+  activationFee: number;
+  hardwareFee: number;
+}
+
+// ₹649.00 / ₹1.00 — keeps every on-screen total in step with what is charged.
+const money = (n: number) =>
+  `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 const PENDING_KEY = "robonexus_pending_registration";
 
 interface RegistrationForm {
@@ -64,6 +85,36 @@ export default function Register() {
 
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showPaidPopup, setShowPaidPopup] = useState(false);
+
+  // Live pricing from the backend. Starts at the fallback figures so the page
+  // renders sensibly before the request lands, then follows the admin toggle.
+  const [payCfg, setPayCfg] = useState<PaymentConfig>({
+    mode: "live",
+    amount: ONBOARDING_AMOUNT,
+    activationFee: ACTIVATION_FEE,
+    hardwareFee: HARDWARE_FEE,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/get_payment_config.php`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled || d?.status !== "success") return;
+        setPayCfg({
+          mode: d.mode === "test" ? "test" : "live",
+          amount: Number(d.amount) || ONBOARDING_AMOUNT,
+          activationFee: Number(d.activationFee) || ACTIVATION_FEE,
+          hardwareFee: Number(d.hardwareFee) || HARDWARE_FEE,
+        });
+      })
+      .catch(() => {
+        /* keep the fallback figures if the backend is unreachable */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const validateStep1 = () => {
     const tempErrors: Record<string, string> = {};
@@ -126,7 +177,7 @@ export default function Register() {
 
     const returnUrl = `${window.location.origin}/register`;
     const params = new URLSearchParams({
-      amount: String(ONBOARDING_AMOUNT),
+      amount: String(payCfg.amount),
       name: formData.fullName,
       email: formData.email,
       phone: formData.phone,
@@ -159,10 +210,7 @@ export default function Register() {
       body.append("paymentAmount", amount || String(ONBOARDING_AMOUNT));
 
       try {
-        const apiBaseUrl = (
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost/robonexus/backend"
-        ).replace(/\/$/, "");
-        const response = await fetch(`${apiBaseUrl}/register.php`, {
+        const response = await fetch(`${API_BASE}/register.php`, {
           method: "POST",
           body,
         });
@@ -246,6 +294,17 @@ export default function Register() {
           Log spatial datasets and earn pay. Complete onboarding registration and secure your Nexus-Core co-processor hardware setup.
         </p>
       </section>
+
+      {/* Test mode is a real charge, just a small one — say so plainly. */}
+      {payCfg.mode === "test" && (
+        <div className="max-w-md mx-auto mb-6 flex items-start gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+          <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-2xs text-amber-200/90 leading-relaxed">
+            <span className="font-bold">Test mode.</span> Onboarding is temporarily set to{" "}
+            {money(payCfg.amount)} instead of the standard fee while we verify the payment gateway.
+          </p>
+        </div>
+      )}
 
       {/* STEP PROGRESS TRACKER */}
       {/* Tighter pills + shorter connectors under `sm` so all three steps fit
@@ -492,7 +551,7 @@ export default function Register() {
 
                     {/* Pricing notice in small light letters */}
                     <p className="text-3xs text-gray-500 leading-relaxed font-mono mt-1">
-                      Onboarding and activation requires a combined hardware co-processor setup and administrative license fee: Onboarding Activation Fee (₹300.00) + Nexus-Core Model-X Hardware Device (₹349.00) = Total payable amount is ₹649.00. Account credentials will be issued upon successful Razorpay payment in Step 2.
+                      Onboarding and activation requires a combined hardware co-processor setup and administrative license fee: Onboarding Activation Fee ({money(payCfg.activationFee)}) + Nexus-Core Model-X Hardware Device ({money(payCfg.hardwareFee)}) = Total payable amount is {money(payCfg.amount)}. Account credentials will be issued upon successful Razorpay payment in Step 2.
                     </p>
                   </div>
 
@@ -530,7 +589,7 @@ export default function Register() {
                     <p className="text-xs text-gray-400 max-w-md mx-auto">
                       You&apos;ll be redirected to our secure Razorpay gateway on
                       <span className="text-white font-semibold"> aimstorm.in </span>
-                      to pay ₹649.00. After payment you&apos;ll return here automatically.
+                      to pay {money(payCfg.amount)}. After payment you&apos;ll return here automatically.
                     </p>
                   </div>
 
@@ -541,15 +600,15 @@ export default function Register() {
                     </h4>
                     <div className="flex justify-between text-xs py-1">
                       <span className="text-gray-400">Onboarding &amp; Telemetry Activation Fee</span>
-                      <span className="text-white font-mono">₹300.00</span>
+                      <span className="text-white font-mono">{money(payCfg.activationFee)}</span>
                     </div>
                     <div className="flex justify-between text-xs py-1">
                       <span className="text-gray-400">Nexus-Core Model-X Hardware Device</span>
-                      <span className="text-white font-mono">₹349.00</span>
+                      <span className="text-white font-mono">{money(payCfg.hardwareFee)}</span>
                     </div>
                     <div className="flex justify-between text-sm py-2 border-t border-brand-card-border/50 mt-2 font-bold">
                       <span className="text-brand-cyan">Total Amount Payable</span>
-                      <span className="text-brand-cyan font-mono">₹649.00</span>
+                      <span className="text-brand-cyan font-mono">{money(payCfg.amount)}</span>
                     </div>
                   </div>
 
@@ -597,7 +656,7 @@ export default function Register() {
                       onClick={handlePayNow}
                       className="w-2/3 relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-cyan to-brand-purple py-3.5 font-bold text-white shadow-lg cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      Pay ₹649.00 with Razorpay
+                      Pay {money(payCfg.amount)} with Razorpay
                       <ArrowRight className="h-4.5 w-4.5" />
                     </framerMotion.button>
                   </div>
@@ -704,7 +763,7 @@ export default function Register() {
 
               <h3 className="text-xl font-extrabold text-white">Payment Successful</h3>
               <p className="text-gray-400 text-xs mt-2 leading-relaxed">
-                Your onboarding payment of ₹649.00 has been received and verified.
+                Your onboarding payment of {money(payCfg.amount)} has been received and verified.
               </p>
 
               <div className="bg-brand-dark/50 border border-brand-card-border/60 rounded-xl p-3 mt-5 text-left">
@@ -754,7 +813,7 @@ export default function Register() {
 
                 <h4 className="font-semibold text-white mt-2">Terms & Conditions</h4>
                 <ol className="list-decimal pl-4 space-y-2">
-                  <li>The ₹649 paid is a combined Registration & Product Fee and is non-refundable under any circumstances.</li>
+                  <li>The {money(payCfg.amount)} paid is a combined Registration &amp; Product Fee and is non-refundable under any circumstances.</li>
                   <li>Your product will be delivered within 7 working days.</li>
                   <li>Your Worker ID is unique and must not be shared with anyone.</li>
                   <li>All information, videos, and documents submitted must be accurate and original.</li>

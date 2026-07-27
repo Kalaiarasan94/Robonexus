@@ -2,6 +2,7 @@
 // admin/index.php - Secure Admin Control Panel at /admin
 require_once __DIR__ . '/../backend/db.php';
 require_once __DIR__ . '/../backend/admin_log.php';
+require_once __DIR__ . '/../backend/settings.php';
 
 session_start();
 
@@ -53,6 +54,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
 // Check authorization
 $isLoggedIn = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
 $currentAdmin = isset($_SESSION['username']) ? $_SESSION['username'] : 'admin';
+
+// 2b. Handle payment-mode toggle (login required — this controls real money)
+$settingsNotice = '';
+if ($isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['set_payment_mode'])) {
+    $newMode = ($_POST['set_payment_mode'] === 'test') ? 'test' : 'live';
+    $oldMode = getPaymentMode($pdo);
+
+    if ($newMode !== $oldMode) {
+        setSetting($pdo, 'payment_mode', $newMode);
+        $newAmount = ($newMode === 'test') ? PAYMENT_AMOUNT_TEST : PAYMENT_AMOUNT_LIVE;
+        logAdminAction(
+            $pdo,
+            'payment_mode',
+            "Onboarding payment mode changed from \"{$oldMode}\" to \"{$newMode}\" — customers are now charged ₹"
+                . number_format($newAmount, 2) . '.',
+            $currentAdmin
+        );
+    }
+    // Redirect so a refresh doesn't re-submit the toggle.
+    header("Location: index.php#settings");
+    exit();
+}
+
+$paymentMode = getPaymentMode($pdo);
+$paymentAmount = getPaymentAmount($pdo);
 
 // 3. Load Data if Logged In
 $registrations = [];
@@ -364,6 +390,8 @@ function logActionMeta($action) {
             return ['icon' => 'fa-right-from-bracket','tone' => 'neutral','label' => 'Sign out'];
         case 'verify_upload':
             return ['icon' => 'fa-clipboard-check',  'tone' => 'info',    'label' => 'Verification'];
+        case 'payment_mode':
+            return ['icon' => 'fa-sliders',          'tone' => 'danger',  'label' => 'Payment mode changed'];
         default:
             return ['icon' => 'fa-circle-info',      'tone' => 'neutral', 'label' => ucfirst(str_replace('_', ' ', $action))];
     }
@@ -1292,6 +1320,12 @@ function logActionMeta($action) {
                         <i class="fa-solid fa-clock-rotate-left"></i> Admin Logs
                         <span class="nav-count"><?php echo count($adminLogs); ?></span>
                     </button>
+                    <button class="nav-item" data-view="settings">
+                        <i class="fa-solid fa-sliders"></i> Settings
+                        <?php if ($paymentMode === 'test'): ?>
+                            <span class="nav-count" style="background: var(--warn-soft); color: var(--warn);">TEST</span>
+                        <?php endif; ?>
+                    </button>
                 </div>
             </nav>
 
@@ -1319,6 +1353,11 @@ function logActionMeta($action) {
                     <div class="crumb" id="pageCrumb">Everything happening across RoboNexus</div>
                 </div>
                 <div class="topbar-right">
+                    <?php if ($paymentMode === 'test'): ?>
+                        <span class="pill pill-warn" title="Onboarding payments are charging ₹<?php echo number_format(PAYMENT_AMOUNT_TEST, 2); ?> instead of the real fee">
+                            <i class="fa-solid fa-flask"></i> Payments in TEST mode
+                        </span>
+                    <?php endif; ?>
                     <?php if ($pdo !== null): ?>
                         <span class="pill pill-ok"><i class="fa-solid fa-circle"></i> MySQL live</span>
                     <?php else: ?>
@@ -1875,6 +1914,99 @@ function logActionMeta($action) {
                     </div>
                 </section>
 
+                <!-- ==================== SETTINGS ==================== -->
+                <section class="view" id="view-settings">
+                    <div class="card">
+                        <div class="card-head">
+                            <h2>Onboarding payment mode</h2>
+                            <?php if ($paymentMode === 'test'): ?>
+                                <span class="tag t-amber"><i class="fa-solid fa-flask"></i> TEST</span>
+                            <?php else: ?>
+                                <span class="tag t-green"><i class="fa-solid fa-circle-check"></i> LIVE</span>
+                            <?php endif; ?>
+                        </div>
+
+                        <div style="padding: 20px 18px;">
+                            <p style="font-size: 13.5px; color: var(--text-soft); max-width: 620px; margin-bottom: 6px;">
+                                Controls what every new contractor is charged to complete onboarding. The
+                                registration page and the aimstorm.in gateway both read this value at the moment
+                                of payment, so the change takes effect immediately — no rebuild, no re-upload.
+                            </p>
+                            <p style="font-size: 12.5px; color: var(--text-muted); max-width: 620px; margin-bottom: 20px;">
+                                Razorpay stays in live mode either way: a TEST-mode payment is a
+                                <strong>real ₹<?php echo number_format(PAYMENT_AMOUNT_TEST, 2); ?> charge</strong>
+                                on a real card. It exists to prove the live gateway works end to end without
+                                putting through the full fee.
+                            </p>
+
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; max-width: 620px;">
+                                <!-- LIVE -->
+                                <form method="POST" action="index.php">
+                                    <input type="hidden" name="set_payment_mode" value="live">
+                                    <button type="submit" style="all: unset; cursor: pointer; display: block; width: 100%;">
+                                        <div style="border: 2px solid <?php echo $paymentMode === 'live' ? 'var(--ok)' : 'var(--border)'; ?>;
+                                                    background: <?php echo $paymentMode === 'live' ? 'var(--ok-soft)' : 'var(--surface)'; ?>;
+                                                    border-radius: var(--radius); padding: 16px;">
+                                            <div style="display: flex; align-items: center; gap: 9px; margin-bottom: 6px;">
+                                                <i class="fa-solid fa-circle-check" style="color: <?php echo $paymentMode === 'live' ? 'var(--ok)' : 'var(--text-muted)'; ?>;"></i>
+                                                <strong style="font-size: 14px;">Live mode</strong>
+                                                <?php if ($paymentMode === 'live'): ?>
+                                                    <span class="tag t-green" style="margin-left: auto;">Active</span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div style="font-size: 21px; font-weight: 680; letter-spacing: -0.02em;">
+                                                ₹<?php echo number_format(PAYMENT_AMOUNT_LIVE, 2); ?>
+                                            </div>
+                                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">
+                                                ₹<?php echo number_format(PAYMENT_ACTIVATION_FEE, 2); ?> activation
+                                                + ₹<?php echo number_format(PAYMENT_HARDWARE_FEE, 2); ?> hardware
+                                            </div>
+                                        </div>
+                                    </button>
+                                </form>
+
+                                <!-- TEST -->
+                                <form method="POST" action="index.php">
+                                    <input type="hidden" name="set_payment_mode" value="test">
+                                    <button type="submit" style="all: unset; cursor: pointer; display: block; width: 100%;">
+                                        <div style="border: 2px solid <?php echo $paymentMode === 'test' ? 'var(--warn)' : 'var(--border)'; ?>;
+                                                    background: <?php echo $paymentMode === 'test' ? 'var(--warn-soft)' : 'var(--surface)'; ?>;
+                                                    border-radius: var(--radius); padding: 16px;">
+                                            <div style="display: flex; align-items: center; gap: 9px; margin-bottom: 6px;">
+                                                <i class="fa-solid fa-flask" style="color: <?php echo $paymentMode === 'test' ? 'var(--warn)' : 'var(--text-muted)'; ?>;"></i>
+                                                <strong style="font-size: 14px;">Test mode</strong>
+                                                <?php if ($paymentMode === 'test'): ?>
+                                                    <span class="tag t-amber" style="margin-left: auto;">Active</span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div style="font-size: 21px; font-weight: 680; letter-spacing: -0.02em;">
+                                                ₹<?php echo number_format(PAYMENT_AMOUNT_TEST, 2); ?>
+                                            </div>
+                                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 3px;">
+                                                For verifying the live gateway
+                                            </div>
+                                        </div>
+                                    </button>
+                                </form>
+                            </div>
+
+                            <?php if ($paymentMode === 'test'): ?>
+                                <div class="alert alert-warn" style="margin-top: 20px; max-width: 620px;">
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                    <span><strong>Test mode is on.</strong> Every contractor registering right now pays
+                                    ₹<?php echo number_format(PAYMENT_AMOUNT_TEST, 2); ?> instead of
+                                    ₹<?php echo number_format(PAYMENT_AMOUNT_LIVE, 2); ?>. Switch back to Live mode
+                                    as soon as your test is finished.</span>
+                                </div>
+                            <?php endif; ?>
+
+                            <p style="font-size: 12px; color: var(--text-muted); margin-top: 18px;">
+                                Every switch is written to <strong>Admin Logs</strong> with the time and who did it.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
             </div>
         </div>
     </div>
@@ -1888,7 +2020,8 @@ function logActionMeta($action) {
             contractors:  ['Contractors',   'Registered contractor accounts'],
             telemetry:    ['Telemetry',     'Video submissions awaiting review'],
             inquiries:    ['Inquiries',     'Messages from the contact form'],
-            logs:         ['Admin Logs',    'Audit trail of console activity']
+            logs:         ['Admin Logs',    'Audit trail of console activity'],
+            settings:     ['Settings',      'Payment mode and console configuration']
         };
 
         function showView(name) {
