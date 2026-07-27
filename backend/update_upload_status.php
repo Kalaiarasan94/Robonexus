@@ -8,6 +8,7 @@ header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-W
 header("Content-Type: application/json; charset=UTF-8");
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/admin_log.php';
 
 // 2. Handle OPTIONS preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -90,7 +91,16 @@ if (!$updated) {
     exit();
 }
 
-// 7. Return success response
+// 7. Record the review in the admin audit trail
+logAdminAction(
+    $pdo,
+    'verify_upload',
+    "Telemetry upload #{$uploadId} set to \"{$status}\" at {$hours} hrs."
+        . ($adminFeedback !== '' ? " Feedback: \"{$adminFeedback}\"" : ''),
+    'admin'
+);
+
+// 8. Return success response
 http_response_code(200);
 echo json_encode([
     "status" => "success",

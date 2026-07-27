@@ -121,6 +121,17 @@ try {
         `timestamp` DATETIME NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
+    // Table 7: admin_logs — audit trail of admin console activity
+    $pdo->exec("CREATE TABLE IF NOT EXISTS `admin_logs` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `action` VARCHAR(50) NOT NULL,
+        `actor` VARCHAR(255) NOT NULL DEFAULT '',
+        `details` TEXT NOT NULL,
+        `ip_address` VARCHAR(64) NOT NULL DEFAULT '',
+        `timestamp` DATETIME NOT NULL,
+        INDEX `idx_admin_logs_timestamp` (`timestamp`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
     // Check & Alter tables if columns are missing
     // 1. Alter orders to add customer_email
     try {

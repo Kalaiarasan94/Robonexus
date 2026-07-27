@@ -56,7 +56,7 @@ export default function Footer() {
                 <li key={link.name}>
                   <Link
                     href={link.href}
-                    className="text-sm text-gray-400 hover:text-brand-cyan transition-colors"
+                    className="inline-block py-2 sm:py-0.5 text-sm text-gray-400 hover:text-brand-cyan transition-colors"
                   >
                     {link.name}
                   </Link>
@@ -79,7 +79,7 @@ export default function Footer() {
                     href="https://maps.google.com/?q=Gurgaon,+Haryana,+India" 
                     target="_blank" 
                     rel="noopener noreferrer" 
-                    className="hover:text-brand-cyan transition-colors"
+                    className="inline-block py-1.5 sm:py-0 hover:text-brand-cyan transition-colors"
                   >
                     Gurgaon, Haryana, India
                   </a>
@@ -88,7 +88,7 @@ export default function Footer() {
                     href="https://maps.google.com/?q=Tamil+Nadu,+India" 
                     target="_blank" 
                     rel="noopener noreferrer" 
-                    className="hover:text-brand-cyan transition-colors"
+                    className="inline-block py-1.5 sm:py-0 hover:text-brand-cyan transition-colors"
                   >
                     Tamil Nadu, India
                   </a>
@@ -96,13 +96,13 @@ export default function Footer() {
               </li>
               <li className="flex items-center gap-3 text-sm text-gray-400">
                 <Mail className="h-5 w-5 text-brand-cyan shrink-0" />
-                <a href="mailto:info@robonexus.com" className="hover:text-brand-cyan transition-colors">
+                <a href="mailto:info@robonexus.com" className="inline-block py-1.5 sm:py-0 hover:text-brand-cyan transition-colors">
                   info@robonexus.com
                 </a>
               </li>
               <li className="flex items-center gap-3 text-sm text-gray-400">
                 <Phone className="h-5 w-5 text-brand-cyan shrink-0" />
-                <a href="tel:+918248106308" className="hover:text-brand-cyan transition-colors">
+                <a href="tel:+918248106308" className="inline-block py-1.5 sm:py-0 hover:text-brand-cyan transition-colors">
                   +91 8248106308
                 </a>
               </li>
@@ -142,10 +142,10 @@ export default function Footer() {
             &copy; {currentYear} RoboNexus. All rights reserved. Built for Next-Gen Artificial Intelligence.
           </p>
           <div className="flex gap-6">
-            <Link href="/register" className="text-xs text-gray-500 hover:text-brand-cyan transition-colors">
+            <Link href="/register" className="inline-block py-2 sm:py-0 text-xs text-gray-500 hover:text-brand-cyan transition-colors">
               Contractor Onboarding
             </Link>
-            <Link href="/contact" className="text-xs text-gray-500 hover:text-brand-cyan transition-colors">
+            <Link href="/contact" className="inline-block py-2 sm:py-0 text-xs text-gray-500 hover:text-brand-cyan transition-colors">
               Support Center
             </Link>
           </div>

@@ -92,7 +92,7 @@ if ($pdo !== null) {
 // 5. Verify Razorpay Payment reference (paid on the aimstorm.in gateway)
 $razorpayPaymentId = isset($_POST['razorpayPaymentId']) ? trim($_POST['razorpayPaymentId']) : '';
 $razorpayOrderId = isset($_POST['razorpayOrderId']) ? trim($_POST['razorpayOrderId']) : '';
-$paymentAmount = isset($_POST['paymentAmount']) ? trim($_POST['paymentAmount']) : '800.00';
+$paymentAmount = isset($_POST['paymentAmount']) ? trim($_POST['paymentAmount']) : '649.00';
 
 if (empty($razorpayPaymentId)) {
     http_response_code(400);
@@ -132,7 +132,7 @@ if ($pdo !== null) {
             ':timestamp' => $timestamp
         ]);
 
-        // B. Insert into orders (₹800 total bundle)
+        // B. Insert into orders (₹649 total bundle: ₹300 onboarding + ₹349 hardware)
         $stmtOrd = $pdo->prepare("INSERT INTO `orders` (`order_id`, `customer_name`, `customer_phone`, `customer_email`, `customer_address`, `product_id`, `product_name`, `product_price`, `payment_screenshot`, `timestamp`) VALUES (:order_id, :customer_name, :customer_phone, :customer_email, :customer_address, :product_id, :product_name, :product_price, :payment_screenshot, :timestamp)");
         $stmtOrd->execute([
             ':order_id' => $orderId,
@@ -142,7 +142,7 @@ if ($pdo !== null) {
             ':customer_address' => $address,
             ':product_id' => 'prod-core-x',
             ':product_name' => 'Nexus-Core Model-X Hardware + Onboarding Bundle',
-            ':product_price' => '₹800.00',
+            ':product_price' => '₹649.00',
             ':payment_screenshot' => $dest_path,
             ':timestamp' => $timestamp
         ]);
@@ -221,7 +221,7 @@ $newOrderData = [
     "product" => [
         "id" => "prod-core-x",
         "name" => "Nexus-Core Model-X Hardware + Onboarding Bundle",
-        "price" => "₹800.00"
+        "price" => "₹649.00"
     ],
     "paymentScreenshot" => $dest_path
 ];
@@ -322,7 +322,7 @@ $emailBody = "
             </div>
             <div class='info-row'>
                 <div class='label'>Fee Paid:</div>
-                <div class='value'>₹800</div>
+                <div class='value'>₹649</div>
             </div>
             <div class='info-row'>
                 <div class='label'>Worker ID:</div>
@@ -364,7 +364,7 @@ $emailBody = "
         
         <h2>Terms & Conditions</h2>
         <ol class='terms-list'>
-            <li>The ₹800 paid is a combined Registration & Product Fee and is non-refundable under any circumstances.</li>
+            <li>The ₹649 paid is a combined Registration & Product Fee and is non-refundable under any circumstances.</li>
             <li>Your product will be delivered within 7 working days.</li>
             <li>Your Worker ID is unique and must not be shared with anyone.</li>
             <li>All information, videos, and documents submitted must be accurate and original.</li>

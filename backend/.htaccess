@@ -6,7 +6,8 @@
   Require all denied
 </FilesMatch>
 
-# Never allow the JSON data stores (users.json holds password hashes) to be downloaded
-<FilesMatch "\.(json|log)$">
+# Never allow the JSON data stores (users.json holds password hashes) to be
+# downloaded. .sql is included so a stray schema dump can't be fetched either.
+<FilesMatch "\.(json|log|sql|md)$">
   Require all denied
 </FilesMatch>

@@ -24,7 +24,7 @@ import ScrollReveal from "@/components/animations/ScrollReveal";
 // hands the user off to it, then the user is redirected back here on success.
 const PAYMENT_URL =
   process.env.NEXT_PUBLIC_PAYMENT_URL || "https://aimstorm.in/payment.php";
-const ONBOARDING_AMOUNT = 800; // ₹300 onboarding + ₹500 hardware
+const ONBOARDING_AMOUNT = 649; // ₹300 onboarding + ₹349 hardware
 const PENDING_KEY = "robonexus_pending_registration";
 
 interface RegistrationForm {
@@ -248,16 +248,18 @@ export default function Register() {
       </section>
 
       {/* STEP PROGRESS TRACKER */}
-      <div className="flex items-center justify-center gap-2 mb-10 max-w-md mx-auto font-mono text-2xs">
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${step >= 1 ? "bg-brand-cyan/15 text-brand-cyan border-brand-cyan/40" : "bg-brand-dark/40 text-gray-600 border-brand-card-border"}`}>
+      {/* Tighter pills + shorter connectors under `sm` so all three steps fit
+          across a 390px phone without the row spilling past the viewport. */}
+      <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mb-10 max-w-md mx-auto font-mono text-2xs">
+        <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full border whitespace-nowrap ${step >= 1 ? "bg-brand-cyan/15 text-brand-cyan border-brand-cyan/40" : "bg-brand-dark/40 text-gray-600 border-brand-card-border"}`}>
           <span className="font-bold">1</span> Details
         </div>
-        <div className="h-[1px] w-8 bg-brand-card-border" />
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${step >= 2 ? "bg-brand-cyan/15 text-brand-cyan border-brand-cyan/40" : "bg-brand-dark/40 text-gray-600 border-brand-card-border"}`}>
+        <div className="hidden sm:block h-[1px] w-8 shrink-0 bg-brand-card-border" />
+        <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full border whitespace-nowrap ${step >= 2 ? "bg-brand-cyan/15 text-brand-cyan border-brand-cyan/40" : "bg-brand-dark/40 text-gray-600 border-brand-card-border"}`}>
           <span className="font-bold">2</span> Payment
         </div>
-        <div className="h-[1px] w-8 bg-brand-card-border" />
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${step >= 3 ? "bg-brand-cyan/15 text-brand-cyan border-brand-cyan/40" : "bg-brand-dark/40 text-gray-600 border-brand-card-border"}`}>
+        <div className="hidden sm:block h-[1px] w-8 shrink-0 bg-brand-card-border" />
+        <div className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full border whitespace-nowrap ${step >= 3 ? "bg-brand-cyan/15 text-brand-cyan border-brand-cyan/40" : "bg-brand-dark/40 text-gray-600 border-brand-card-border"}`}>
           <span className="font-bold">3</span> Credentials
         </div>
       </div>
@@ -490,7 +492,7 @@ export default function Register() {
 
                     {/* Pricing notice in small light letters */}
                     <p className="text-3xs text-gray-500 leading-relaxed font-mono mt-1">
-                      Onboarding and activation requires a combined hardware co-processor setup and administrative license fee: Onboarding Activation Fee (₹300.00) + Nexus-Core Model-X Hardware Device (₹500.00) = Total payable amount is ₹800.00. Account credentials will be issued upon successful Razorpay payment in Step 2.
+                      Onboarding and activation requires a combined hardware co-processor setup and administrative license fee: Onboarding Activation Fee (₹300.00) + Nexus-Core Model-X Hardware Device (₹349.00) = Total payable amount is ₹649.00. Account credentials will be issued upon successful Razorpay payment in Step 2.
                     </p>
                   </div>
 
@@ -528,7 +530,7 @@ export default function Register() {
                     <p className="text-xs text-gray-400 max-w-md mx-auto">
                       You&apos;ll be redirected to our secure Razorpay gateway on
                       <span className="text-white font-semibold"> aimstorm.in </span>
-                      to pay ₹800.00. After payment you&apos;ll return here automatically.
+                      to pay ₹649.00. After payment you&apos;ll return here automatically.
                     </p>
                   </div>
 
@@ -543,11 +545,11 @@ export default function Register() {
                     </div>
                     <div className="flex justify-between text-xs py-1">
                       <span className="text-gray-400">Nexus-Core Model-X Hardware Device</span>
-                      <span className="text-white font-mono">₹500.00</span>
+                      <span className="text-white font-mono">₹349.00</span>
                     </div>
                     <div className="flex justify-between text-sm py-2 border-t border-brand-card-border/50 mt-2 font-bold">
                       <span className="text-brand-cyan">Total Amount Payable</span>
-                      <span className="text-brand-cyan font-mono">₹800.00</span>
+                      <span className="text-brand-cyan font-mono">₹649.00</span>
                     </div>
                   </div>
 
@@ -595,7 +597,7 @@ export default function Register() {
                       onClick={handlePayNow}
                       className="w-2/3 relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-cyan to-brand-purple py-3.5 font-bold text-white shadow-lg cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      Pay ₹800.00 with Razorpay
+                      Pay ₹649.00 with Razorpay
                       <ArrowRight className="h-4.5 w-4.5" />
                     </framerMotion.button>
                   </div>
@@ -702,7 +704,7 @@ export default function Register() {
 
               <h3 className="text-xl font-extrabold text-white">Payment Successful</h3>
               <p className="text-gray-400 text-xs mt-2 leading-relaxed">
-                Your onboarding payment of ₹800.00 has been received and verified.
+                Your onboarding payment of ₹649.00 has been received and verified.
               </p>
 
               <div className="bg-brand-dark/50 border border-brand-card-border/60 rounded-xl p-3 mt-5 text-left">
@@ -752,7 +754,7 @@ export default function Register() {
 
                 <h4 className="font-semibold text-white mt-2">Terms & Conditions</h4>
                 <ol className="list-decimal pl-4 space-y-2">
-                  <li>The ₹800 paid is a combined Registration & Product Fee and is non-refundable under any circumstances.</li>
+                  <li>The ₹649 paid is a combined Registration & Product Fee and is non-refundable under any circumstances.</li>
                   <li>Your product will be delivered within 7 working days.</li>
                   <li>Your Worker ID is unique and must not be shared with anyone.</li>
                   <li>All information, videos, and documents submitted must be accurate and original.</li>

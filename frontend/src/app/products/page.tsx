@@ -233,7 +233,7 @@ export default function ProductsPage() {
               <span className="text-2xl sm:text-3xl font-black text-brand-cyan">
                 {selectedProduct.price}
               </span>
-              <p className="text-[10px] font-mono text-gray-500 mt-0.5">Free Global Express Shipping</p>
+              <p className="text-[11px] sm:text-[10px] font-mono text-gray-500 mt-0.5">Free Global Express Shipping</p>
             </div>
           </div>
 
@@ -301,16 +301,16 @@ export default function ProductsPage() {
                       className="w-full h-auto"
                     />
                     {isComingSoon ? (
-                      <span className="absolute top-2.5 left-2.5 bg-red-950/85 backdrop-blur-md text-[10px] font-bold font-mono text-red-400 px-2 py-0.5 rounded-full border border-red-500/20">
+                      <span className="absolute top-2.5 left-2.5 bg-red-950/85 backdrop-blur-md text-[11px] sm:text-[10px] font-bold font-mono text-red-400 px-2 py-0.5 rounded-full border border-red-500/20">
                         COMING SOON
                       </span>
                     ) : prod.badge ? (
-                      <span className="absolute top-2.5 left-2.5 bg-brand-dark/85 backdrop-blur-md text-[10px] font-bold font-mono text-brand-violet px-2 py-0.5 rounded-full border border-brand-purple/20">
+                      <span className="absolute top-2.5 left-2.5 bg-brand-dark/85 backdrop-blur-md text-[11px] sm:text-[10px] font-bold font-mono text-brand-violet px-2 py-0.5 rounded-full border border-brand-purple/20">
                         {prod.badge}
                       </span>
                     ) : null}
                   </div>
-                  <span className="text-[10px] font-mono text-brand-cyan uppercase tracking-wide">
+                  <span className="text-[11px] sm:text-[10px] font-mono text-brand-cyan uppercase tracking-wide">
                     {prod.category}
                   </span>
                   <h3 className="font-bold text-white text-base sm:text-lg mt-0.5 line-clamp-1">
@@ -427,11 +427,11 @@ export default function ProductsPage() {
                       />
                     </div>
                     <div>
-                      <span className="text-[10px] font-mono text-brand-violet uppercase">{selectedProduct.category}</span>
+                      <span className="text-[11px] sm:text-[10px] font-mono text-brand-violet uppercase">{selectedProduct.category}</span>
                       <h4 className="font-bold text-white text-sm line-clamp-1">{selectedProduct.name}</h4>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-brand-cyan text-sm font-black">{selectedProduct.price}</span>
-                        <span className="text-[10px] text-gray-500">x 1 Unit</span>
+                        <span className="text-[11px] sm:text-[10px] text-gray-500">x 1 Unit</span>
                       </div>
                     </div>
                   </div>
