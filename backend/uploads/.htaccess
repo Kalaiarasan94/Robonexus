@@ -1,0 +1,32 @@
+# RoboNexus — uploads hardening.
+#
+# These files are customer payment screenshots and telemetry videos. The admin
+# panel links to them directly (admin/index.php builds "../backend/uploads/…"
+# URLs), so they must stay readable over HTTP — we cannot blanket-deny here.
+# What we CAN do is stop the directory being browsable and stop anything in it
+# from ever being executed as code.
+
+# No directory listing — without this, /backend/uploads/ dumps every customer
+# receipt to anyone who visits it.
+Options -Indexes
+
+# Never execute anything in this folder, whatever it is named.
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+  php_flag engine off
+</IfModule>
+
+# LiteSpeed (Hostinger's default) honours this instead of the mod_php blocks.
+<IfModule lsapi_module>
+  php_flag engine off
+</IfModule>
+
+# Belt and braces: deny any script-ish extension outright.
+<FilesMatch "\.(php|php[0-9]|phtml|phar|pl|py|cgi|sh|html?|htaccess)$">
+  Require all denied
+</FilesMatch>

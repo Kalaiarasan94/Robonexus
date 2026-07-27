@@ -20,13 +20,21 @@ if ($dbEnv === 'production') {
 $pdo = null;
 
 try {
-    // 1. Connect to MySQL server first without selecting a database
-    $connString = "mysql:host=$dbHost;charset=utf8mb4";
-    $tempPdo = new PDO($connString, $dbUser, $dbPass);
-    $tempPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-    // 2. Auto-create database if it does not exist (useful for zero-config local run)
-    $tempPdo->exec("CREATE DATABASE IF NOT EXISTS `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    // 1 & 2. Auto-create the database if it is missing. This is a convenience for
+    // zero-config local XAMPP runs ONLY. On shared hosting (Hostinger) the DB user
+    // is scoped to one pre-made database and has no CREATE privilege — and may not
+    // be able to connect without naming a database at all. Both of those are
+    // expected there, so this whole block is best-effort: if it fails we carry on
+    // to step 3 and connect to the database the host already created for us.
+    // (Previously a failure here threw out of the outer try, leaving $pdo null and
+    // silently degrading the live site to JSON-file storage.)
+    try {
+        $tempPdo = new PDO("mysql:host=$dbHost;charset=utf8mb4", $dbUser, $dbPass);
+        $tempPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $tempPdo->exec("CREATE DATABASE IF NOT EXISTS `$dbName` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    } catch (PDOException $e) {
+        error_log("RoboNexus: skipping DB auto-create (expected on shared hosting): " . $e->getMessage());
+    }
     $tempPdo = null; // Close connection
 
     // 3. Connect to the specific database

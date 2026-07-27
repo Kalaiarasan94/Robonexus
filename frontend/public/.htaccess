@@ -1,8 +1,49 @@
 # RoboNexus static export (Next.js) on Apache / Hostinger.
 # Serves the exported HTML; leaves backend/ and admin/ PHP folders untouched.
+# Lives in frontend/public/ so every `npm run build` copies it into out/.
 
 Options -MultiViews
-DirectoryIndex index.html
+# index.php must stay in the list: this file is inherited by /admin, which is
+# the PHP panel (admin/index.php) and has no index.html. Dropping index.php
+# here makes /admin return 403 once Options -Indexes is on.
+DirectoryIndex index.html index.php
 
 # Friendly 404 from the export
 ErrorDocument 404 /404.html
+
+# Never list directory contents
+Options -Indexes
+
+# --- Canonical host + HTTPS ----------------------------------------------
+RewriteEngine On
+
+# www -> non-www (SITE_URL in backend/.env is https://robonexus.co.in)
+RewriteCond %{HTTP_HOST} ^www\.robonexus\.co\.in$ [NC]
+RewriteRule ^(.*)$ https://robonexus.co.in/$1 [R=301,L]
+
+# Force HTTPS
+RewriteCond %{HTTPS} !=on
+RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+
+# next.config.ts uses trailingSlash:true, so pages are folders holding
+# index.html. mod_dir resolves /register -> /register/ -> index.html on its
+# own, so no extra rewrite rules are needed here.
+
+# --- Caching --------------------------------------------------------------
+<IfModule mod_expires.c>
+  ExpiresActive On
+  # /_next/static filenames are content-hashed, so they cache hard.
+  <FilesMatch "\.(js|css|woff2|png|jpg|jpeg|webp|svg|ico)$">
+    ExpiresDefault "access plus 1 year"
+  </FilesMatch>
+  # HTML must revalidate or users keep a stale app shell after a redeploy.
+  <FilesMatch "\.html$">
+    ExpiresDefault "access plus 0 seconds"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+</IfModule>

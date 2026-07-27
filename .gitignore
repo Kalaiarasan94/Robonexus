@@ -30,8 +30,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — these hold live DB/SMTP/Razorpay secrets, never commit them
 .env*
+
+# Staged upload folder — contains a copy of backend/.env, never commit it
+/deploy_public_html/
 
 # vercel
 .vercel
@@ -52,7 +55,12 @@ build/
 dist/
 
 # Environment files
-
+# `.env*` above covers the dotted files. These catch dot-less variants
+# (backend/env, backend/env.production) that slip past it.
+/backend/env
+/backend/env.*
+/frontend/env
+/frontend/env.*
 
 # Logs
 npm-debug.log*
