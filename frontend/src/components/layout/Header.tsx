@@ -50,6 +50,8 @@ export default function Header() {
                 height={80} 
                 className="object-contain"
                 priority
+                loading="eager"
+                style={{ width: 'auto', height: 'auto' }}
               />
             </div>
             <span className="text-xl font-bold tracking-tight text-white transition-all duration-300">
@@ -83,8 +85,11 @@ export default function Header() {
           })}
         </nav>
 
-        {/* CTA Button */}
-        <div className="hidden md:flex flex-1 justify-end items-center">
+        {/* CTA Buttons */}
+        <div className="hidden md:flex flex-1 justify-end items-center gap-4">
+          <Link href="/login" className="text-sm font-semibold text-gray-300 hover:text-white transition-colors">
+            Customer Login
+          </Link>
           <Link href="/register">
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -136,9 +141,16 @@ export default function Header() {
                 );
               })}
               <Link 
+                href="/login" 
+                onClick={() => setIsOpen(false)}
+                className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-brand-card-border bg-brand-dark py-3 font-semibold text-white hover:bg-brand-card/50 transition-colors"
+              >
+                Customer Login
+              </Link>
+              <Link 
                 href="/register" 
                 onClick={() => setIsOpen(false)}
-                className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-cyan to-brand-violet py-3 font-semibold text-white shadow-lg"
+                className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-cyan to-brand-violet py-3 font-semibold text-white shadow-lg"
               >
                 Register Now
                 <ArrowRight className="h-4 w-4" />

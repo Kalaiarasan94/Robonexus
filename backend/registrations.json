@@ -58,5 +58,77 @@
         "accountNumber": "23647632246642",
         "ifscCode": "TBMNFC3432",
         "timestamp": "2026-07-13 16:17:54"
+    },
+    {
+        "registerId": "RNX-2026-792057",
+        "fullName": "Referred Person 1",
+        "email": "ref1@example.com",
+        "phone": "9876500011",
+        "address": "Addr 1, Chennai",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "referredBy": "9000000000",
+        "timestamp": "2026-07-29 14:00:20"
+    },
+    {
+        "registerId": "RNX-2026-241152",
+        "fullName": "Referred Person 2",
+        "email": "ref2@example.com",
+        "phone": "9876500022",
+        "address": "Addr 2, Chennai",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "referredBy": "9000000000",
+        "timestamp": "2026-07-29 14:00:23"
+    },
+    {
+        "registerId": "RNX-2026-559456",
+        "fullName": "Referred Person 3",
+        "email": "ref3@example.com",
+        "phone": "9876500033",
+        "address": "Addr 3, Chennai",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "referredBy": "9000000000",
+        "timestamp": "2026-07-29 14:00:25"
+    },
+    {
+        "registerId": "RNX-2026-911251",
+        "fullName": "Referred Person 4",
+        "email": "ref4@example.com",
+        "phone": "9876500044",
+        "address": "Addr 4, Chennai",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "referredBy": "9000000000",
+        "timestamp": "2026-07-29 14:00:28"
+    },
+    {
+        "registerId": "RNX-2026-260068",
+        "fullName": "Referred Person 5",
+        "email": "ref5@example.com",
+        "phone": "9876500055",
+        "address": "Addr 5, Chennai",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "referredBy": "9000000000",
+        "timestamp": "2026-07-29 14:00:30"
+    },
+    {
+        "registerId": "RNX-2026-718515",
+        "fullName": "Referred Person 6",
+        "email": "ref6@example.com",
+        "phone": "9876500066",
+        "address": "Addr 6, Chennai",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "referredBy": "9000000000",
+        "timestamp": "2026-07-29 14:00:33"
     }
 ]

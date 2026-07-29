@@ -1,0 +1,16 @@
+[
+    {
+        "action": "login",
+        "actor": "admin",
+        "details": "Successful admin sign-in.",
+        "ipAddress": "::1",
+        "timestamp": "2026-07-29 14:25:19"
+    },
+    {
+        "action": "withdrawal",
+        "actor": "admin",
+        "details": "Withdrawal #1 marked \"paid\". Note: \"UTR 12345678\"",
+        "ipAddress": "::1",
+        "timestamp": "2026-07-29 14:25:19"
+    }
+]

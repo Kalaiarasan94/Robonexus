@@ -8,6 +8,7 @@ header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-W
 header("Content-Type: application/json; charset=UTF-8");
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/referral.php';
 
 // 2. Handle OPTIONS preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -138,6 +139,26 @@ $baselineLogs = [
 // Combine logs (new uploaded logs on top, baseline logs below)
 $allLogs = array_merge($uploadedLogs, $baselineLogs);
 
+// 8. Referral + wallet figures. Resolve the contractor's own phone first — it
+//    doubles as their referral code.
+$phone = '';
+if ($pdo !== null) {
+    try {
+        $stmt = $pdo->prepare("SELECT `phone` FROM `users` WHERE `email` = :e LIMIT 1");
+        $stmt->execute([':e' => $email]);
+        $phone = (string) $stmt->fetchColumn();
+    } catch (PDOException $e) {
+        error_log("Phone lookup failed: " . $e->getMessage());
+    }
+}
+if ($phone === '' || $phone === '0') {
+    foreach (loadUsersFallback() as $u) {
+        if (strcasecmp($u['email'] ?? '', $email) === 0) { $phone = $u['phone'] ?? ''; break; }
+    }
+}
+
+$wallet = getWalletSummary($pdo, $email, $phone);
+
 // Return stats
 http_response_code(200);
 echo json_encode([
@@ -147,6 +168,24 @@ echo json_encode([
         "approvedHours" => round($approvedHoursSum, 2),
         "pendingHours" => round($pendingHoursSum, 2),
         "uploadCount" => count($uploadedLogs)
+    ],
+    "referral" => [
+        "code" => normalisePhone($phone),
+        "count" => $wallet['referralCount'],
+        "list" => $wallet['referrals'],
+        "perBonus" => $wallet['referralsPerBonus'],
+        "bonusPerBlock" => $wallet['bonusPerBlock'],
+        "toNextBonus" => $wallet['referralsToNext']
+    ],
+    "wallet" => [
+        "available" => $wallet['available'],
+        "totalEarned" => $wallet['totalEarned'],
+        "referralEarnings" => $wallet['referralEarnings'],
+        "uploadEarnings" => $wallet['uploadEarnings'],
+        "withdrawn" => $wallet['withdrawn'],
+        "pendingWithdrawal" => $wallet['pendingWithdrawal'],
+        "minWithdrawal" => $wallet['minWithdrawal'],
+        "history" => $wallet['withdrawals']
     ],
     "logs" => $allLogs
 ]);

@@ -1,0 +1,16 @@
+[
+    {
+        "id": 1,
+        "userEmail": "customer@robonexus.co.in",
+        "userName": "Demo Customer",
+        "amount": 1000,
+        "accountHolder": "Demo Customer",
+        "bankName": "HDFC Bank",
+        "accountNumber": "123456789012",
+        "ifscCode": "HDFC0001234",
+        "status": "paid",
+        "adminNote": "UTR 12345678",
+        "requestedAt": "2026-07-29 14:00:55",
+        "processedAt": "2026-07-29 14:25:19"
+    }
+]

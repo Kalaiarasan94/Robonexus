@@ -53,9 +53,6 @@ interface RegistrationForm {
   email: string;
   phone: string;
   address: string;
-  bankName: string;
-  accountNumber: string;
-  ifscCode: string;
   consent: boolean;
 }
 
@@ -68,9 +65,6 @@ export default function Register() {
     email: "",
     phone: "",
     address: "",
-    bankName: "",
-    accountNumber: "",
-    ifscCode: "",
     consent: false,
   });
 
@@ -82,6 +76,33 @@ export default function Register() {
   const [registerId, setRegisterId] = useState("");
   const [paymentId, setPaymentId] = useState("");
   const [tempCredentials, setTempCredentials] = useState({ username: "", password: "" });
+
+  // Optional referral code (an existing contractor's phone number). Looked up
+  // live so the applicant can see whose name they are about to be linked to.
+  const [referralCode, setReferralCode] = useState("");
+  const [referralCheck, setReferralCheck] = useState<{
+    state: "idle" | "checking" | "found" | "notfound";
+    name: string;
+  }>({ state: "idle", name: "" });
+
+  useEffect(() => {
+    const code = referralCode.trim();
+    if (code === "") {
+      setReferralCheck({ state: "idle", name: "" });
+      return;
+    }
+    setReferralCheck({ state: "checking", name: "" });
+    const t = setTimeout(() => {
+      fetch(`${API_BASE}/check_referral.php?code=${encodeURIComponent(code)}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d?.found) setReferralCheck({ state: "found", name: d.referrerName });
+          else setReferralCheck({ state: "notfound", name: "" });
+        })
+        .catch(() => setReferralCheck({ state: "idle", name: "" }));
+    }, 450);
+    return () => clearTimeout(t);
+  }, [referralCode]);
 
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showPaidPopup, setShowPaidPopup] = useState(false);
@@ -131,9 +152,6 @@ export default function Register() {
     }
 
     if (!formData.address.trim()) tempErrors.address = "Complete Delivery Address is required";
-    if (!formData.bankName.trim()) tempErrors.bankName = "Bank Name is required";
-    if (!formData.accountNumber.trim()) tempErrors.accountNumber = "Account Number is required";
-    if (!formData.ifscCode.trim()) tempErrors.ifscCode = "IFSC Code is required";
 
     if (!formData.consent) {
       tempErrors.consent = "You must agree to the contractor terms and conditions to proceed";
@@ -173,7 +191,7 @@ export default function Register() {
     setSubmitError(null);
     // Persist the entered details so we can finalize registration when the
     // gateway redirects the user back to /register.
-    sessionStorage.setItem(PENDING_KEY, JSON.stringify(formData));
+    sessionStorage.setItem(PENDING_KEY, JSON.stringify({ ...formData, referralCode }));
 
     const returnUrl = `${window.location.origin}/register`;
     const params = new URLSearchParams({
@@ -202,9 +220,7 @@ export default function Register() {
       body.append("email", stored.email);
       body.append("phone", stored.phone);
       body.append("address", stored.address);
-      body.append("bankName", stored.bankName);
-      body.append("accountNumber", stored.accountNumber);
-      body.append("ifscCode", stored.ifscCode);
+      body.append("referralCode", (stored as RegistrationForm & { referralCode?: string }).referralCode || "");
       body.append("razorpayPaymentId", rpPaymentId);
       body.append("razorpayOrderId", rpOrderId);
       body.append("paymentAmount", amount || String(ONBOARDING_AMOUNT));
@@ -440,84 +456,40 @@ export default function Register() {
                         </div>
                         {errors.address && <p className="text-2xs text-red-400 mt-1">{errors.address}</p>}
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Section 1.2: Bank Details */}
-                  <div>
-                    <h3 className="text-xs font-bold font-mono text-brand-cyan uppercase tracking-wider mb-4 border-b border-brand-card-border/60 pb-1.5 flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-brand-cyan" />
-                      02. Compensation Disbursement Bank Details
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
+                      {/* Optional referral code — confirms the referrer by name */}
+                      <div className="sm:col-span-2">
                         <label className="block text-2xs font-semibold text-gray-300 uppercase tracking-wider mb-1.5">
-                          Bank Name
+                          Referral ID <span className="text-gray-500 normal-case font-normal">(optional)</span>
                         </label>
                         <div className="relative">
                           <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
-                            <Building className="h-3.5 w-3.5" />
+                            <User className="h-3.5 w-3.5" />
                           </span>
                           <input
                             type="text"
-                            required
-                            name="bankName"
-                            value={formData.bankName}
-                            onChange={handleChange}
-                            className={`w-full bg-brand-dark/50 border rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-brand-cyan focus:border-brand-cyan transition-colors ${
-                              errors.bankName ? "border-red-500/85" : "border-brand-card-border"
-                            }`}
-                            placeholder="Silicon Valley Bank"
+                            inputMode="numeric"
+                            name="referralCode"
+                            value={referralCode}
+                            onChange={(e) => setReferralCode(e.target.value)}
+                            className="w-full bg-brand-dark/50 border border-brand-card-border rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-brand-cyan focus:border-brand-cyan transition-colors"
+                            placeholder="Phone number of the person who referred you"
                           />
                         </div>
-                        {errors.bankName && <p className="text-2xs text-red-400 mt-1">{errors.bankName}</p>}
-                      </div>
-
-                      <div>
-                        <label className="block text-2xs font-semibold text-gray-300 uppercase tracking-wider mb-1.5">
-                          Account Number
-                        </label>
-                        <div className="relative">
-                          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
-                            <CreditCard className="h-3.5 w-3.5" />
-                          </span>
-                          <input
-                            type="text"
-                            required
-                            name="accountNumber"
-                            value={formData.accountNumber}
-                            onChange={handleChange}
-                            className={`w-full bg-brand-dark/50 border rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-brand-cyan focus:border-brand-cyan transition-colors ${
-                              errors.accountNumber ? "border-red-500/85" : "border-brand-card-border"
-                            }`}
-                            placeholder="01234567890"
-                          />
-                        </div>
-                        {errors.accountNumber && <p className="text-2xs text-red-400 mt-1">{errors.accountNumber}</p>}
-                      </div>
-
-                      <div>
-                        <label className="block text-2xs font-semibold text-gray-300 uppercase tracking-wider mb-1.5">
-                          IFSC / Routing Code
-                        </label>
-                        <div className="relative">
-                          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">
-                            <Hash className="h-3.5 w-3.5" />
-                          </span>
-                          <input
-                            type="text"
-                            required
-                            name="ifscCode"
-                            value={formData.ifscCode}
-                            onChange={handleChange}
-                            className={`w-full bg-brand-dark/50 border rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-brand-cyan focus:border-brand-cyan transition-colors ${
-                              errors.ifscCode ? "border-red-500/85" : "border-brand-card-border"
-                            }`}
-                            placeholder="IFSC0001234"
-                          />
-                        </div>
-                        {errors.ifscCode && <p className="text-2xs text-red-400 mt-1">{errors.ifscCode}</p>}
+                        {referralCheck.state === "checking" && (
+                          <p className="text-2xs text-gray-500 mt-1">Checking…</p>
+                        )}
+                        {referralCheck.state === "found" && (
+                          <p className="text-2xs text-emerald-400 mt-1 flex items-center gap-1.5">
+                            <CheckCircle className="h-3 w-3" />
+                            Referred by <span className="font-bold">{referralCheck.name}</span>
+                          </p>
+                        )}
+                        {referralCheck.state === "notfound" && (
+                          <p className="text-2xs text-amber-400 mt-1">
+                            No contractor found with that referral ID. You can still continue without one.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -105,13 +105,14 @@ export default function Home() {
             transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
             className="relative w-full h-[320px] sm:h-[420px] rounded-3xl overflow-hidden border border-brand-card-border shadow-2xl bg-brand-dark/40 backdrop-blur-sm group"
           >
-            <RevealMask className="h-full w-full" delay={0.4}>
+            <RevealMask className="relative h-full w-full" delay={0.4}>
               <div className="absolute inset-0 bg-gradient-to-t from-brand-dark via-transparent to-transparent z-10 opacity-60" />
               <Image
                 src="/hero_humans.png"
                 alt="Real Humans impacting AI - RoboNexus"
                 fill
                 priority
+                loading="eager"
                 className="object-cover transition-transform duration-1000 group-hover:scale-105"
               />
             </RevealMask>
@@ -255,7 +256,7 @@ export default function Home() {
             ].map((service, idx) => (
               <div key={idx} className="glow-card rounded-2xl overflow-hidden h-full flex flex-col group">
                 <div className="relative h-44 w-full">
-                  <RevealMask className="h-full w-full">
+                  <RevealMask className="relative h-full w-full">
                     <Image
                       src={service.image}
                       alt={service.title}

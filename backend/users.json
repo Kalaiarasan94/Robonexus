@@ -31,5 +31,88 @@
         "accountNumber": "23647632246642",
         "ifscCode": "TBMNFC3432",
         "timestamp": "2026-07-13 16:17:54"
+    },
+    {
+        "email": "customer@robonexus.co.in",
+        "password": "$2y$10$zW0iK2z5eSPrlO8VL05Kf.TjN1dTXWDt4MQ\/gpJqRuzMy71hrdOPu",
+        "name": "Demo Customer",
+        "phone": "9000000000",
+        "address": "Demo Address, Chennai, Tamil Nadu",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "timestamp": "2026-07-29 12:39:45"
+    },
+    {
+        "email": "ref1@example.com",
+        "password": "$2y$10$c4iVIpT8DILGzM9ZkMTaCer1uRHkGZSJmeqiucodKGpCCG7p4kOd6",
+        "name": "Referred Person 1",
+        "phone": "9876500011",
+        "address": "Addr 1, Chennai",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "referredBy": "9000000000",
+        "timestamp": "2026-07-29 14:00:20"
+    },
+    {
+        "email": "ref2@example.com",
+        "password": "$2y$10$uE98PNUdOLl5v2v3.fo8zu7sKsZ8KehBAfOlfhPWteGBHlU4iDb\/a",
+        "name": "Referred Person 2",
+        "phone": "9876500022",
+        "address": "Addr 2, Chennai",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "referredBy": "9000000000",
+        "timestamp": "2026-07-29 14:00:23"
+    },
+    {
+        "email": "ref3@example.com",
+        "password": "$2y$10$ml5f7F\/BXFXEhy5PSKHE4uYTBWETdiy\/dRkJHUYBa8Nu0Uv2RqYr6",
+        "name": "Referred Person 3",
+        "phone": "9876500033",
+        "address": "Addr 3, Chennai",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "referredBy": "9000000000",
+        "timestamp": "2026-07-29 14:00:25"
+    },
+    {
+        "email": "ref4@example.com",
+        "password": "$2y$10$mbgMWXqa5KFNl6ZTXQW.Sest9GMhQL3ql93V6yFjuV3zLaMKkWhHG",
+        "name": "Referred Person 4",
+        "phone": "9876500044",
+        "address": "Addr 4, Chennai",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "referredBy": "9000000000",
+        "timestamp": "2026-07-29 14:00:28"
+    },
+    {
+        "email": "ref5@example.com",
+        "password": "$2y$10$uCJkpf8W2Xm8dSa0Mq1uB.LdWHrhdLKRSdvVRiE5AWWD04vRP4AZu",
+        "name": "Referred Person 5",
+        "phone": "9876500055",
+        "address": "Addr 5, Chennai",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "referredBy": "9000000000",
+        "timestamp": "2026-07-29 14:00:30"
+    },
+    {
+        "email": "ref6@example.com",
+        "password": "$2y$10$LMRWmX8OmUckyRJLIX\/DfOdzJFUyBdOPsum5aTRbqoUE9lJTdOsYW",
+        "name": "Referred Person 6",
+        "phone": "9876500066",
+        "address": "Addr 6, Chennai",
+        "bankName": "",
+        "accountNumber": "",
+        "ifscCode": "",
+        "referredBy": "9000000000",
+        "timestamp": "2026-07-29 14:00:33"
     }
 ]

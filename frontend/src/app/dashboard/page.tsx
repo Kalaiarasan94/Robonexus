@@ -1,25 +1,27 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Upload, 
-  DollarSign, 
-  Clock, 
-  Activity, 
-  Lock, 
-  LogOut, 
-  CheckCircle, 
-  AlertCircle, 
-  FileVideo, 
-  User, 
-  CreditCard,
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Upload,
+  Clock,
+  Activity,
+  LogOut,
+  CheckCircle,
+  AlertCircle,
+  FileVideo,
+  User,
   Key,
-  ShieldCheck,
-  RefreshCw,
-  ArrowRight
+  Wallet,
+  Users,
+  Copy,
+  Check,
+  LayoutGrid,
+  Menu,
+  X,
+  Banknote,
+  Gift,
+  ArrowRight,
 } from "lucide-react";
-import ScrollReveal from "@/components/animations/ScrollReveal";
 
 interface TelemetryLog {
   id?: string | number;
@@ -43,8 +45,45 @@ interface UserProfile {
   ifscCode: string;
 }
 
+interface Referral {
+  name: string;
+  email: string;
+  joinedAt: string;
+}
+
+interface WithdrawalRow {
+  id: number;
+  amount: number;
+  status: string;
+  bankName: string;
+  accountNumber: string;
+  adminNote: string;
+  requestedAt: string;
+  processedAt: string | null;
+}
+
+const API_BASE = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost/robonexus/backend"
+).replace(/\/$/, "");
+
+const money = (n: number) =>
+  `₹${(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+type Section = "overview" | "telemetry" | "referrals" | "wallet" | "profile";
+
+const NAV: { id: Section; label: string; icon: React.ElementType }[] = [
+  { id: "overview", label: "Overview", icon: LayoutGrid },
+  { id: "telemetry", label: "Upload Telemetry", icon: FileVideo },
+  { id: "referrals", label: "Refer & Earn", icon: Users },
+  { id: "wallet", label: "Wallet", icon: Wallet },
+  { id: "profile", label: "My Profile", icon: User },
+];
+
 export default function Dashboard() {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [section, setSection] = useState<Section>("overview");
+  const [navOpen, setNavOpen] = useState(false);
+
   const [stats, setStats] = useState({
     totalHours: 0,
     approvedHours: 0,
@@ -53,22 +92,90 @@ export default function Dashboard() {
   });
   const [logs, setLogs] = useState<TelemetryLog[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
-  
-  // Upload States
+
+  // Referral + wallet
+  const [referralCode, setReferralCode] = useState("");
+  const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [perBonus, setPerBonus] = useState(6);
+  const [bonusPerBlock, setBonusPerBlock] = useState(1000);
+  const [toNextBonus, setToNextBonus] = useState(6);
+  const [wallet, setWallet] = useState({
+    available: 0,
+    totalEarned: 0,
+    referralEarnings: 0,
+    uploadEarnings: 0,
+    withdrawn: 0,
+    pendingWithdrawal: 0,
+    minWithdrawal: 100,
+  });
+  const [withdrawals, setWithdrawals] = useState<WithdrawalRow[]>([]);
+  const [copied, setCopied] = useState(false);
+
+  // Withdraw form
+  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [wAmount, setWAmount] = useState("");
+  const [wHolder, setWHolder] = useState("");
+  const [wBank, setWBank] = useState("");
+  const [wAccount, setWAccount] = useState("");
+  const [wIfsc, setWIfsc] = useState("");
+  const [wError, setWError] = useState<string | null>(null);
+  const [wSuccess, setWSuccess] = useState<string | null>(null);
+  const [wSubmitting, setWSubmitting] = useState(false);
+
+  // Upload states
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [hoursInput, setHoursInput] = useState("");
   const [userMessageInput, setUserMessageInput] = useState("");
   const [termsConsent, setTermsConsent] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  
-  // Custom parsing simulation states
   const [isParsing, setIsParsing] = useState(false);
   const [parseProgress, setParseProgress] = useState(0);
   const [parsePhase, setParsePhase] = useState("");
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Authentication check on mount
+  const redirectToLogin = () => {
+    window.location.href = "/login";
+  };
+
+  const fetchStats = useCallback(async (email: string) => {
+    setIsLoadingStats(true);
+    try {
+      const response = await fetch(
+        `${API_BASE}/get_user_stats.php?email=${encodeURIComponent(email)}`,
+        { cache: "no-store" }
+      );
+      const data = await response.json();
+      if (response.ok && data.status === "success") {
+        setStats(data.stats);
+        setLogs(data.logs);
+        if (data.referral) {
+          setReferralCode(data.referral.code || "");
+          setReferrals(data.referral.list || []);
+          setPerBonus(data.referral.perBonus || 6);
+          setBonusPerBlock(data.referral.bonusPerBlock || 1000);
+          setToNextBonus(data.referral.toNextBonus || 6);
+        }
+        if (data.wallet) {
+          setWallet({
+            available: data.wallet.available || 0,
+            totalEarned: data.wallet.totalEarned || 0,
+            referralEarnings: data.wallet.referralEarnings || 0,
+            uploadEarnings: data.wallet.uploadEarnings || 0,
+            withdrawn: data.wallet.withdrawn || 0,
+            pendingWithdrawal: data.wallet.pendingWithdrawal || 0,
+            minWithdrawal: data.wallet.minWithdrawal || 100,
+          });
+          setWithdrawals(data.wallet.history || []);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load contractor statistics:", err);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  }, []);
+
   useEffect(() => {
     const session = localStorage.getItem("contractorUser");
     if (session) {
@@ -76,132 +183,137 @@ export default function Dashboard() {
         const profile = JSON.parse(session);
         setUser(profile);
         fetchStats(profile.email);
-      } catch (e) {
-        console.error("Error decoding contractor session", e);
+      } catch {
         redirectToLogin();
       }
     } else {
       redirectToLogin();
     }
-  }, []);
-
-  const redirectToLogin = () => {
-    window.location.href = "/login";
-  };
+  }, [fetchStats]);
 
   const handleLogout = () => {
     localStorage.removeItem("contractorUser");
     redirectToLogin();
   };
 
-  // Fetch telemetry logs and statistics
-  const fetchStats = async (email: string) => {
-    setIsLoadingStats(true);
+  const copyCode = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost/robonexus/backend";
-      const response = await fetch(`${apiUrl}/get_user_stats.php?email=${encodeURIComponent(email)}`);
-      const data = await response.json();
-      if (response.ok && data.status === "success") {
-        setStats(data.stats);
-        setLogs(data.logs);
-      }
-    } catch (err) {
-      console.error("Failed to load contractor statistics:", err);
-    } finally {
-      setIsLoadingStats(false);
+      await navigator.clipboard.writeText(referralCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* clipboard blocked — the code is on screen to copy manually */
     }
   };
 
-  // Uploader Handlers
-  const triggerFileSelect = () => {
-    fileInputRef.current?.click();
+  const go = (s: Section) => {
+    setSection(s);
+    setNavOpen(false);
+  };
+
+  // ---------- Withdrawal ----------
+  const openWithdraw = () => {
+    setWError(null);
+    setWSuccess(null);
+    setWAmount(String(wallet.available > 0 ? wallet.available : ""));
+    setWHolder(user?.name || "");
+    setWBank(user?.bankName || "");
+    setWAccount(user?.accountNumber || "");
+    setWIfsc(user?.ifscCode || "");
+    setShowWithdraw(true);
+  };
+
+  const submitWithdraw = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setWError(null);
+    setWSubmitting(true);
+
+    const body = new FormData();
+    body.append("email", user.email);
+    body.append("amount", wAmount);
+    body.append("accountHolder", wHolder);
+    body.append("bankName", wBank);
+    body.append("accountNumber", wAccount);
+    body.append("ifscCode", wIfsc);
+
+    try {
+      const res = await fetch(`${API_BASE}/request_withdrawal.php`, { method: "POST", body });
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        setWSuccess(data.message);
+        setShowWithdraw(false);
+        fetchStats(user.email);
+      } else {
+        setWError(data.message || "Could not submit the withdrawal request.");
+      }
+    } catch {
+      setWError("Could not reach the server. Please try again.");
+    } finally {
+      setWSubmitting(false);
+    }
+  };
+
+  // ---------- Upload ----------
+  const triggerFileSelect = () => fileInputRef.current?.click();
+
+  const acceptFile = (file: File) => {
+    if (file.size > 500 * 1024 * 1024) {
+      setUploadError("File exceeds the maximum limit of 500MB.");
+      setVideoFile(null);
+      return;
+    }
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    const allowed = ["mp4", "avi", "mov", "webm", "mkv", "json"];
+    if (!allowed.includes(ext)) {
+      setUploadError("Invalid format. Allowed: " + allowed.join(", "));
+      return;
+    }
+    setVideoFile(file);
+    setUploadError(null);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      if (file.size > 500 * 1024 * 1024) {
-        setUploadError("File exceeds the maximum limit of 500MB. Please upload a file under 500MB.");
-        setVideoFile(null);
-      } else {
-        setVideoFile(file);
-        setUploadError(null);
-      }
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
+    if (e.target.files?.[0]) acceptFile(e.target.files[0]);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      if (file.size > 500 * 1024 * 1024) {
-        setUploadError("File exceeds the maximum limit of 500MB. Please upload a file under 500MB.");
-        setVideoFile(null);
-        return;
-      }
-      const nameCmps = file.name.split(".");
-      const extension = nameCmps[nameCmps.length - 1].toLowerCase();
-      const allowed = ["mp4", "avi", "mov", "webm", "mkv", "json"];
-      
-      if (allowed.includes(extension)) {
-        setVideoFile(file);
-        setUploadError(null);
-      } else {
-        setUploadError("Invalid format. Allowed formats: " + allowed.join(", "));
-      }
-    }
+    if (e.dataTransfer.files?.[0]) acceptFile(e.dataTransfer.files[0]);
   };
 
-  // Trigger telemetry parsing simulation + API upload
   const handleTelemetryUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!videoFile || !user) return;
-
     if (!hoursInput || parseFloat(hoursInput) <= 0) {
       setUploadError("Please provide a valid number of hours worked.");
       return;
     }
     if (!termsConsent) {
-      setUploadError("You must agree to the telemetry upload guidelines terms to submit.");
+      setUploadError("You must agree to the telemetry upload guidelines to submit.");
       return;
     }
 
     setUploadError(null);
     setIsParsing(true);
     setParseProgress(0);
-    setParsePhase("Initializing link with Nexus-Core Co-Processor...");
 
-    // 1. Run UI parsing simulation progress (feels extremely dynamic and futuristic)
-    const runSimulation = () => {
-      return new Promise<void>((resolve) => {
-        let currentProgress = 0;
-        const interval = setInterval(() => {
-          currentProgress += 1;
-          setParseProgress(currentProgress);
+    await new Promise<void>((resolve) => {
+      let p = 0;
+      const iv = setInterval(() => {
+        p += 1;
+        setParseProgress(p);
+        if (p < 25) setParsePhase("Connecting with local AI accelerator frame...");
+        else if (p < 50) setParsePhase("Scanning video spatial dimensions...");
+        else if (p < 75) setParsePhase("Calculating joint torque vectors...");
+        else if (p < 100) setParsePhase("Syncing coordinates to central registry...");
+        else {
+          clearInterval(iv);
+          resolve();
+        }
+      }, 20);
+    });
 
-          if (currentProgress < 25) {
-            setParsePhase("Connecting with local AI accelerator frame...");
-          } else if (currentProgress < 50) {
-            setParsePhase("Scanning video spatial dimensions & coordinate metrics...");
-          } else if (currentProgress < 75) {
-            setParsePhase("Calculating joint torque vectors & motor voltage spikes...");
-          } else if (currentProgress < 100) {
-            setParsePhase("Syncing analyzed joint coordinates to central registry...");
-          } else {
-            clearInterval(interval);
-            resolve();
-          }
-        }, 20); // Sync fast
-      });
-    };
-
-    await runSimulation();
-
-    // 2. Perform actual file upload to Backend PHP API
     const formData = new FormData();
     formData.append("email", user.email);
     formData.append("video", videoFile);
@@ -209,48 +321,37 @@ export default function Dashboard() {
     formData.append("userMessage", userMessageInput);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost/robonexus/backend";
-      const response = await fetch(`${apiUrl}/upload_video.php`, {
-        method: "POST",
-        body: formData,
-      });
-
+      const response = await fetch(`${API_BASE}/upload_video.php`, { method: "POST", body: formData });
       const data = await response.json();
 
       if (response.ok && data.status === "success") {
-        // Clear file input and form states
         setVideoFile(null);
         setHoursInput("");
         setUserMessageInput("");
         setTermsConsent(false);
-        
-        // Prepend new telemetry to current logs list
-        const newLog: TelemetryLog = {
-          id: data.telemetry.id,
-          filename: data.telemetry.filename,
-          filepath: data.telemetry.filepath,
-          durationHours: data.telemetry.durationHours,
-          userMessage: data.telemetry.userMessage,
-          adminFeedback: data.telemetry.adminFeedback,
-          status: data.telemetry.status,
-          timestamp: data.telemetry.timestamp
-        };
-        
-        setLogs((prev) => [newLog, ...prev]);
-        
-        // Dynamically increment total statistics instantly in front of user
+        setLogs((prev) => [
+          {
+            id: data.telemetry.id,
+            filename: data.telemetry.filename,
+            filepath: data.telemetry.filepath,
+            durationHours: data.telemetry.durationHours,
+            userMessage: data.telemetry.userMessage,
+            adminFeedback: data.telemetry.adminFeedback,
+            status: data.telemetry.status,
+            timestamp: data.telemetry.timestamp,
+          },
+          ...prev,
+        ]);
         setStats((prev) => ({
           ...prev,
-          pendingHours: prev.pendingHours + newLog.durationHours,
-          uploadCount: prev.uploadCount + 1
+          pendingHours: prev.pendingHours + data.telemetry.durationHours,
+          uploadCount: prev.uploadCount + 1,
         }));
-
       } else {
         setUploadError(data.message || "Failed to log telemetry dataset.");
       }
-    } catch (err) {
-      console.error("Upload error:", err);
-      setUploadError("Server connection error during upload. Verify that XAMPP Apache is running.");
+    } catch {
+      setUploadError("Server connection error during upload.");
     } finally {
       setIsParsing(false);
       setParseProgress(0);
@@ -261,398 +362,624 @@ export default function Dashboard() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0b0b0f] text-white font-mono text-xs">
-        Decrypting access profile...
+        Loading your account…
       </div>
     );
   }
 
+  const referralProgress = referrals.length % perBonus;
+  const progressPct = (referralProgress / perBonus) * 100;
+  const statusTone = (s: string) =>
+    /approved|verified|paid/i.test(s)
+      ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/30"
+      : /rejected/i.test(s)
+      ? "text-red-400 bg-red-500/10 border-red-500/30"
+      : "text-amber-400 bg-amber-500/10 border-amber-500/30";
+
+  // ------------------------------------------------------------------ render
   return (
-    <div className="min-h-screen bg-[#0b0b0f] text-gray-200">
-      
-      {/* GLOW DECORATIONS */}
-      <div className="absolute top-0 right-0 w-[40vw] h-[40vh] bg-gradient-to-br from-brand-cyan/5 to-transparent rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[40vw] h-[40vh] bg-gradient-to-tr from-brand-purple/5 to-transparent rounded-full blur-[100px] pointer-events-none" />
+    <div className="min-h-screen bg-[#0b0b0f] text-gray-200 flex flex-col lg:flex-row">
+      {/* ---------------- LEFT MENU ---------------- */}
+      <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r border-brand-card-border bg-[#0f1117] min-h-screen sticky top-0">
+        <div className="p-6 border-b border-brand-card-border flex items-center gap-3">
+          <p className="text-sm font-bold font-mono tracking-widest text-brand-cyan uppercase">
+            Customer Portal
+          </p>
+        </div>
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          {NAV.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => go(id)}
+              className={`w-full flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-colors ${
+                section === id
+                  ? "bg-brand-cyan/15 text-brand-cyan font-semibold"
+                  : "text-gray-400 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {label}
+              {id === "wallet" && wallet.available > 0 && (
+                <span className="ml-auto text-3xs font-mono bg-emerald-500/15 text-emerald-400 rounded-full px-1.5 py-0.5">
+                  {money(wallet.available).replace(".00", "")}
+                </span>
+              )}
+              {id === "referrals" && referrals.length > 0 && (
+                <span className="ml-auto text-3xs font-mono bg-white/10 text-gray-300 rounded-full px-1.5 py-0.5">
+                  {referrals.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+        <div className="p-4 border-t border-brand-card-border/60">
+          <button
+            onClick={() => (window.location.href = `/change-password?email=${encodeURIComponent(user.email)}`)}
+            className="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-gray-400 hover:bg-white/5 hover:text-white transition-colors mb-1"
+          >
+            <Key className="h-4 w-4" /> Change Password
+          </button>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-gray-400 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+          >
+            <LogOut className="h-4 w-4" /> Sign Out
+          </button>
+        </div>
+      </aside>
 
-      {/* DASHBOARD CONTAINER */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {/* TOP PANEL NAVIGATION HEADER */}
-        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-brand-card-border pb-6 mb-8">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-2xs font-mono font-bold text-brand-cyan uppercase bg-brand-cyan/10 px-2 py-0.5 rounded border border-brand-cyan/20">
-                Authorized Node
-              </span>
-              <span className="text-3xs text-gray-500 font-mono">
-                SECURE FRAME: SSL-Active
-              </span>
+      {/* Mobile drawer (NO ANIMATION) */}
+      {navOpen && (
+        <>
+          <div
+            onClick={() => setNavOpen(false)}
+            className="lg:hidden fixed inset-0 bg-black/60 z-40"
+          />
+          <aside className="lg:hidden fixed inset-y-0 left-0 z-50 w-72 bg-[#0f1117] border-r border-brand-card-border p-4 overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <span className="font-bold text-white text-sm font-mono tracking-widest text-brand-cyan uppercase">Customer Portal</span>
+              <button onClick={() => setNavOpen(false)} aria-label="Close menu">
+                <X className="h-5 w-5 text-gray-400" />
+              </button>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1.5 tracking-tight flex items-center gap-2">
-              <Activity className="h-6 w-6 text-brand-cyan animate-pulse" />
-              Contractor Telemetry Terminal
-            </h1>
-          </div>
+            {NAV.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => go(id)}
+                className={`w-full flex items-center gap-3 rounded-xl px-3 py-3 text-sm mb-1 ${
+                  section === id
+                    ? "bg-brand-cyan/15 text-brand-cyan font-semibold"
+                    : "text-gray-400"
+                }`}
+              >
+                <Icon className="h-4 w-4" /> {label}
+              </button>
+            ))}
+            <div className="mt-2 pt-2 border-t border-brand-card-border/60">
+              <button
+                onClick={() => (window.location.href = `/change-password?email=${encodeURIComponent(user.email)}`)}
+                className="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-gray-400"
+              >
+                <Key className="h-4 w-4" /> Change Password
+              </button>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-red-400"
+              >
+                <LogOut className="h-4 w-4" /> Sign Out
+              </button>
+            </div>
+          </aside>
+        </>
+      )}
 
-          <div className="flex items-center gap-3">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Header */}
+        <header className="flex items-center justify-between gap-3 p-4 sm:p-6 border-b border-brand-card-border bg-[#0b0b0f] sticky top-0 z-20">
+          <div className="min-w-0 flex items-center gap-3">
             <button
-              onClick={() => {
-                window.location.href = `/change-password?email=${encodeURIComponent(user.email)}`;
-              }}
-              className="px-3.5 py-2 bg-brand-dark/50 border border-brand-card-border rounded-xl text-2xs font-bold text-gray-300 hover:text-white hover:border-brand-cyan/40 transition-colors flex items-center gap-1.5 cursor-pointer font-mono"
+              onClick={() => setNavOpen(true)}
+              className="lg:hidden shrink-0 rounded-xl border border-brand-card-border p-2 bg-brand-dark text-gray-300"
+              aria-label="Open menu"
             >
-              <Key className="h-3.5 w-3.5" />
-              Change Passkey
+              <Menu className="h-5 w-5" />
             </button>
-            <button
-              onClick={handleLogout}
-              className="px-3.5 py-2 bg-red-950/15 border border-red-500/20 rounded-xl text-2xs font-bold text-red-400 hover:text-white hover:bg-red-500/10 hover:border-red-500/30 transition-colors flex items-center gap-1.5 cursor-pointer font-mono"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Disconnect Session
-            </button>
+            <h1 className="text-xl sm:text-2xl font-bold text-white truncate">
+              Welcome back, {user.name.split(" ")[0]}
+            </h1>
           </div>
         </header>
 
-        {/* MAIN SPLIT VIEW */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          
-          {/* LEFT SIDEBAR: PROFILE INFO & METRICS CARD */}
-          <div className="lg:col-span-4 flex flex-col gap-6">
-            
-            {/* profile widget */}
-            <div className="glow-card rounded-2xl p-5 border border-brand-card-border bg-brand-card/30 backdrop-blur-md">
-              <h3 className="text-2xs font-mono font-bold text-gray-400 uppercase tracking-widest border-b border-brand-card-border/50 pb-2 mb-4 flex items-center gap-1.5">
-                <User className="h-3.5 w-3.5 text-brand-cyan" />
-                Contractor Identity Profile
-              </h3>
-              
-              <div className="flex flex-col gap-3.5">
-                <div>
-                  <span className="text-[10px] text-gray-500 font-mono block">FULL LEGAL NAME</span>
-                  <span className="text-sm font-bold text-white block mt-0.5">{user.name}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-gray-500 font-mono block">COMMUNICATION TARGET (EMAIL)</span>
-                  <span className="text-xs font-mono text-brand-cyan block mt-0.5">{user.email}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-gray-500 font-mono block">SECURE TELEPHONE COORDINATES</span>
-                  <span className="text-xs font-mono text-white block mt-0.5">{user.phone}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-gray-500 font-mono block">DELIVERY ADDRESS</span>
-                  <span className="text-xs text-gray-400 block mt-0.5 leading-relaxed">{user.address}</span>
-                </div>
-                
-                <div className="pt-3.5 border-t border-brand-card-border/50">
-                  <span className="text-[10px] text-gray-500 font-mono block mb-1">DISBURSEMENT BANKING ROUTE</span>
-                  <div className="flex items-center justify-between text-xs font-mono bg-brand-dark/50 border border-brand-card-border/40 p-2.5 rounded-xl">
-                    <span className="text-white font-semibold flex items-center gap-1.5">
-                      <CreditCard className="h-3.5 w-3.5 text-brand-cyan" />
-                      {user.bankName}
-                    </span>
-                    <span className="text-brand-cyan font-bold">
-                      ••••{user.accountNumber.slice(-4)}
-                    </span>
-                  </div>
-                </div>
+        {/* Content Body */}
+        <main className="p-4 sm:p-6 lg:p-8 flex-1 overflow-x-hidden">
+            {wSuccess && (
+              <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3">
+                <CheckCircle className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-emerald-200">{wSuccess}</p>
               </div>
-            </div>
+            )}
 
-            {/* Metrics Widget */}
-            <div className="glow-card rounded-2xl p-5 border border-brand-card-border bg-brand-card/30 backdrop-blur-md">
-              <h3 className="text-2xs font-mono font-bold text-gray-400 uppercase tracking-widest border-b border-brand-card-border/50 pb-2 mb-4">
-                Telemetry Metrics
-              </h3>
-
-              <div className="grid grid-cols-2 gap-4">
-                
-                <div className="bg-brand-dark/40 border border-brand-card-border/40 p-3.5 rounded-xl">
-                  <div className="flex justify-between items-center text-gray-500 mb-1">
-                    <span className="text-[10px] font-mono font-bold">APPROVED HOURS</span>
-                    <Clock className="h-3.5 w-3.5 text-brand-cyan" />
-                  </div>
-                  <span className="text-xl font-mono font-black text-white">
-                    {isLoadingStats ? "..." : stats.totalHours.toFixed(1)}
-                  </span>
-                  <span className="text-[10px] text-gray-500 font-mono block mt-1">Verified Logs</span>
+            {/* ===================== OVERVIEW ===================== */}
+            {section === "overview" && (
+              <div className="flex flex-col gap-5">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                  <StatCard icon={Wallet} label="Wallet balance" value={money(wallet.available)} tone="emerald" />
+                  <StatCard icon={Users} label="Referrals" value={String(referrals.length)} tone="cyan" />
+                  <StatCard icon={Clock} label="Approved hours" value={`${stats.approvedHours}`} tone="violet" />
+                  <StatCard icon={Activity} label="Uploads" value={String(stats.uploadCount)} tone="slate" />
                 </div>
 
-                <div className="bg-brand-dark/40 border border-brand-card-border/40 p-3.5 rounded-xl">
-                  <div className="flex justify-between items-center text-gray-500 mb-1">
-                    <span className="text-[10px] font-mono font-bold">PENDING HOURS</span>
-                    <Activity className="h-3.5 w-3.5 text-brand-purple" />
-                  </div>
-                  <span className="text-xl font-mono font-black text-brand-cyan">
-                    {isLoadingStats ? "..." : stats.pendingHours.toFixed(1)}
-                  </span>
-                  <span className="text-[10px] text-gray-500 font-mono block mt-1">Pending Validation</span>
-                </div>
-
-                <div className="bg-brand-dark/40 border border-brand-card-border/40 p-3.5 rounded-xl col-span-2">
-                  <div className="flex justify-between items-center text-gray-500 mb-1">
-                    <span className="text-[10px] font-mono font-bold">TOTAL DATASETS LOGGED</span>
-                    <ShieldCheck className="h-3.5 w-3.5 text-brand-cyan" />
-                  </div>
-                  <div className="flex justify-between items-baseline mt-1.5">
-                    <span className="text-base font-mono font-bold text-white">
-                      {isLoadingStats ? "..." : stats.uploadCount} Video Logs
-                    </span>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-
-          </div>
-
-          {/* RIGHT COLUMN: VIDEO UPLOADER & LOGS LIST */}
-          <div className="lg:col-span-8 flex flex-col gap-6">
-            
-            {/* TELEMETRY UPLOADER FORM */}
-            <div className="glow-card rounded-2xl p-5 border border-brand-card-border bg-brand-card/30 backdrop-blur-md">
-              <h3 className="text-2xs font-mono font-bold text-gray-400 uppercase tracking-widest border-b border-brand-card-border/50 pb-2 mb-4">
-                Telemetry Log Pipeline Upload
-              </h3>
-
-              <AnimatePresence mode="wait">
-                {isParsing ? (
-                  // Custom Parsing Simulation UI
-                  <motion.div
-                    key="parsing"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="p-8 text-center flex flex-col items-center justify-center"
-                  >
-                    <div className="relative h-20 w-20 flex items-center justify-center mb-6">
-                      {/* Spinning core */}
-                      <div className="absolute inset-0 border-4 border-brand-cyan/20 border-t-brand-cyan rounded-full animate-spin" />
-                      <div className="absolute inset-2 border-4 border-brand-purple/20 border-t-brand-purple rounded-full animate-spin [animation-direction:reverse] [animation-duration:1.5s]" />
-                      <FileVideo className="h-6 w-6 text-brand-cyan animate-pulse" />
+                {/* Referral progress */}
+                <Card>
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                      <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Gift className="h-4 w-4 text-brand-cyan" /> Refer {perBonus} people, earn {money(bonusPerBlock)}
+                      </h2>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {referrals.length === 0
+                          ? "Share your referral ID to start earning."
+                          : `${referrals.length} joined so far — ${toNextBonus} more for your next ${money(bonusPerBlock)}.`}
+                      </p>
                     </div>
+                    <button
+                      onClick={() => go("referrals")}
+                      className="text-xs font-semibold text-brand-cyan inline-flex items-center gap-1.5"
+                    >
+                      Invite people <ArrowRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
 
-                    <span className="text-xs font-mono font-bold text-white block mb-1">
-                      ANALYZING SPATIAL RESOLUTION: {parseProgress}%
-                    </span>
-                    <span className="text-3xs font-mono text-brand-cyan block max-w-sm mb-4 leading-normal h-8">
-                      {parsePhase}
-                    </span>
-
-                    {/* Progress Bar container */}
-                    <div className="w-full max-w-md bg-brand-dark/60 h-2 rounded-full border border-brand-card-border overflow-hidden relative shadow-inner">
-                      <motion.div
-                        className="h-full bg-gradient-to-r from-brand-cyan to-brand-purple"
-                        style={{ width: `${parseProgress}%` }}
-                        transition={{ ease: "easeInOut" }}
+                  <div className="mt-4">
+                    <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-brand-cyan to-brand-purple transition-all"
+                        style={{ width: `${progressPct}%` }}
                       />
                     </div>
-                  </motion.div>
-                ) : (
-                  // Standard Drag & Drop Uploader Form
-                  <motion.div
-                    key="uploader"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    <form onSubmit={handleTelemetryUpload} className="flex flex-col gap-4">
-                      
-                      <div
-                        onDragOver={handleDragOver}
-                        onDrop={handleDrop}
-                        onClick={triggerFileSelect}
-                        className="border-2 border-dashed border-brand-card-border/70 hover:border-brand-cyan/60 rounded-xl p-8 text-center bg-brand-dark/20 hover:bg-brand-dark/40 cursor-pointer transition-all flex flex-col items-center justify-center gap-3 group"
-                      >
-                        <input
-                          type="file"
-                          ref={fileInputRef}
-                          onChange={handleFileChange}
-                          accept=".mp4,.avi,.mov,.webm,.mkv,.json"
-                          className="hidden"
-                        />
-
-                        <div className="h-11 w-11 rounded-full bg-brand-cyan/10 flex items-center justify-center border border-brand-cyan/20 group-hover:scale-105 transition-transform text-brand-cyan">
-                          <Upload className="h-5 w-5" />
-                        </div>
-
-                        {videoFile ? (
-                          <div className="flex flex-col items-center">
-                            <span className="text-xs font-bold text-white font-mono line-clamp-1">
-                              {videoFile.name}
-                            </span>
-                            <span className="text-3xs text-gray-500 font-mono mt-0.5">
-                              {(videoFile.size / (1024 * 1024)).toFixed(2)} MB | Click to Change
-                            </span>
-                          </div>
-                        ) : (
-                          <div>
-                            <span className="text-xs font-bold text-white block">
-                              Select Telemetry Data File to Upload
-                            </span>
-                            <span className="text-3xs text-gray-400 block mt-1 font-mono">
-                              Supports MP4, WebM, AVI video logs or JSON tracking files (up to 500MB)
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* User inputs for hours and message */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-3xs font-mono font-bold text-gray-400 uppercase tracking-widest">
-                            Hours Worked in this Video Log *
-                          </label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            required
-                            placeholder="e.g. 3.5"
-                            value={hoursInput}
-                            onChange={(e) => setHoursInput(e.target.value)}
-                            className="bg-brand-dark/50 border border-brand-card-border/85 focus:border-brand-cyan/60 rounded-xl px-4 py-3 text-xs font-mono text-white placeholder-gray-600 focus:outline-none transition-all"
-                          />
-                        </div>
-
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-3xs font-mono font-bold text-gray-400 uppercase tracking-widest">
-                            Additional Message / Notes for Verification
-                          </label>
-                          <textarea
-                            placeholder="Describe any specific tasks, coordinates or issues..."
-                            value={userMessageInput}
-                            onChange={(e) => setUserMessageInput(e.target.value)}
-                            rows={1}
-                            className="bg-brand-dark/50 border border-brand-card-border/85 focus:border-brand-cyan/60 rounded-xl px-4 py-3.5 text-xs font-sans text-white placeholder-gray-600 focus:outline-none transition-all resize-none"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Guidelines Consent */}
-                      <div className="flex items-start gap-2.5 bg-brand-dark/20 p-3 rounded-xl border border-brand-card-border/50">
-                        <input
-                          type="checkbox"
-                          id="termsConsent"
-                          checked={termsConsent}
-                          onChange={(e) => setTermsConsent(e.target.checked)}
-                          className="mt-0.5 h-4 w-4 rounded border-brand-card-border bg-brand-dark text-brand-cyan focus:ring-brand-cyan focus:ring-opacity-25 cursor-pointer"
-                        />
-                        <label htmlFor="termsConsent" className="text-3xs text-gray-400 leading-normal select-none cursor-pointer">
-                          <strong className="text-gray-300">Upload Terms:</strong> I certify that I am uploading the correct telemetry video log. I agree that if the video is found to be incorrect, duplicated, or invalid, the submission may get rejected.
-                        </label>
-                      </div>
-
-                      {uploadError && (
-                        <div className="bg-red-500/10 border border-red-500/25 p-3.5 rounded-xl flex gap-2 text-red-200 text-xs items-start font-mono">
-                          <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
-                          <span>{uploadError}</span>
-                        </div>
-                      )}
-
-                      <motion.button
-                        disabled={!videoFile || !hoursInput || !termsConsent}
-                        whileHover={videoFile && hoursInput && termsConsent ? { scale: 1.01 } : {}}
-                        whileTap={videoFile && hoursInput && termsConsent ? { scale: 0.99 } : {}}
-                        type="submit"
-                        className="w-full relative inline-flex items-center justify-center gap-2 rounded-xl py-3.5 font-bold text-white text-xs shadow-md bg-gradient-to-r from-brand-cyan to-brand-purple hover:shadow-brand-cyan/20 transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed uppercase font-mono tracking-wider"
-                      >
-                        Upload and Parse Telemetry Data
-                        <ArrowRight className="h-4 w-4" />
-                      </motion.button>
-
-                    </form>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* LOGGED VIDEOS DATA TABLE */}
-            <div className="glow-card rounded-2xl border border-brand-card-border bg-brand-card/30 backdrop-blur-md overflow-hidden">
-              <div className="p-5 border-b border-brand-card-border/50 flex justify-between items-center">
-                <h3 className="text-2xs font-mono font-bold text-gray-400 uppercase tracking-widest">
-                  Logged Telemetry Datasets
-                </h3>
-                <button
-                  onClick={() => fetchStats(user.email)}
-                  disabled={isLoadingStats}
-                  className="p-1.5 bg-brand-dark/50 border border-brand-card-border/80 hover:border-brand-cyan/40 hover:text-white rounded-lg transition-colors cursor-pointer"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 text-gray-400 ${isLoadingStats ? "animate-spin text-brand-cyan" : ""}`} />
-                </button>
-              </div>
-
-              <div className="overflow-x-auto">
-                {isLoadingStats && logs.length === 0 ? (
-                  <div className="p-8 text-center text-xs font-mono text-gray-500">
-                    Decrypting log database...
+                    <div className="flex justify-between mt-1.5 text-3xs font-mono text-gray-500">
+                      <span>{referralProgress} / {perBonus} toward next bonus</span>
+                      <span>{money(wallet.referralEarnings)} earned</span>
+                    </div>
                   </div>
-                ) : logs.length > 0 ? (
-                  <table className="w-full border-collapse text-left text-xs">
-                    <thead>
-                      <tr className="bg-brand-dark/60 border-b border-brand-card-border/50 text-[10px] uppercase font-mono text-gray-500">
-                        <th className="py-3.5 px-5">LOG FILENAME & FEEDBACK</th>
-                        <th className="py-3.5 px-4">HOURS WORKED</th>
-                        <th className="py-3.5 px-4">STATUS</th>
-                        <th className="py-3.5 px-5">DATE RECORDED</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-brand-card-border/20 text-gray-300">
-                      {logs.map((log, index) => (
-                        <tr key={index} className="hover:bg-brand-cyan/5 transition-colors">
-                          <td className="py-3 px-5 font-mono max-w-xs">
-                            <span className="font-semibold text-white block truncate">{log.filename}</span>
-                            {log.userMessage && (
-                              <span className="text-[10px] text-gray-400 block mt-1 leading-normal italic font-sans">
-                                Note: {log.userMessage}
-                              </span>
-                            )}
-                            {log.adminFeedback && (
-                              <span className="text-[10px] text-brand-cyan block mt-1.5 leading-normal font-sans border-l-2 border-brand-cyan/40 pl-2 bg-brand-cyan/5 py-1 rounded">
-                                Admin Message: {log.adminFeedback}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 font-mono">
-                            {log.durationHours.toFixed(1)} hrs
-                          </td>
-                          <td className="py-3 px-4">
-                            {log.status === "Approved" || log.status === "Verified" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-green-500/25 bg-green-500/10 text-green-400 text-3xs font-bold font-mono">
-                                <CheckCircle className="h-3 w-3" />
-                                {log.status}
-                              </span>
-                            ) : log.status === "Rejected" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-red-500/25 bg-red-500/10 text-red-400 text-3xs font-bold font-mono">
-                                <AlertCircle className="h-3 w-3" />
-                                Rejected
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-brand-purple/25 bg-brand-purple/10 text-brand-purple text-3xs font-bold font-mono animate-pulse">
-                                <Clock className="h-3 w-3" />
-                                Pending
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-5 text-3xs font-mono text-gray-500 whitespace-nowrap">
-                            {log.timestamp}
-                          </td>
-                        </tr>
+                </Card>
+
+                <Card>
+                  <h2 className="text-sm font-bold text-white mb-3">Recent uploads</h2>
+                  {isLoadingStats ? (
+                    <p className="text-xs text-gray-500">Loading…</p>
+                  ) : logs.length === 0 ? (
+                    <p className="text-xs text-gray-500">Nothing uploaded yet.</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {logs.slice(0, 4).map((l, i) => (
+                        <div key={i} className="flex items-center justify-between gap-3 text-xs py-2 border-b border-brand-card-border/40 last:border-0">
+                          <span className="truncate text-gray-300">{l.filename}</span>
+                          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-3xs font-semibold ${statusTone(l.status)}`}>
+                            {l.status}
+                          </span>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div className="p-8 text-center text-xs font-mono text-gray-500">
-                    No logs recorded. Upload a telemetry video to log your first coordinates.
-                  </div>
-                )}
+                    </div>
+                  )}
+                </Card>
               </div>
-            </div>
+            )}
 
-          </div>
+            {/* ===================== REFERRALS ===================== */}
+            {section === "referrals" && (
+              <div className="flex flex-col gap-5">
+                <Card>
+                  <h2 className="text-base font-bold text-white">Your referral ID</h2>
+                  <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+                    Share this ID. When someone enters it while registering, they are
+                    counted as your referral. Every <b className="text-white">{perBonus}</b> people
+                    who join adds <b className="text-emerald-400">{money(bonusPerBlock)}</b> to your wallet automatically.
+                  </p>
 
-        </div>
+                  <div className="mt-4 flex items-center gap-2 rounded-xl border border-brand-cyan/30 bg-brand-cyan/5 p-3">
+                    <span className="font-mono text-lg sm:text-xl font-bold text-brand-cyan tracking-wider flex-1 truncate">
+                      {referralCode || "—"}
+                    </span>
+                    <button
+                      onClick={copyCode}
+                      className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-brand-cyan/15 px-3 py-2 text-xs font-semibold text-brand-cyan"
+                    >
+                      {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                  <p className="text-3xs text-gray-500 mt-2 font-mono">
+                    This is your registered phone number.
+                  </p>
+                </Card>
 
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <StatCard icon={Users} label="Total referrals" value={String(referrals.length)} tone="cyan" />
+                  <StatCard icon={Gift} label="Referral earnings" value={money(wallet.referralEarnings)} tone="emerald" />
+                  <StatCard icon={Activity} label="Until next bonus" value={String(toNextBonus)} tone="violet" />
+                </div>
+
+                <Card>
+                  <h2 className="text-sm font-bold text-white mb-3">
+                    People you referred ({referrals.length})
+                  </h2>
+                  {referrals.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <Users className="h-8 w-8 text-gray-600 mx-auto mb-2" />
+                      <p className="text-xs text-gray-500">
+                        No referrals yet. Share your ID above to get started.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col">
+                      {referrals.map((r, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-3 py-2.5 border-b border-brand-card-border/40 last:border-0"
+                        >
+                          <div className="h-8 w-8 shrink-0 rounded-full bg-brand-cyan/15 text-brand-cyan grid place-items-center text-xs font-bold">
+                            {r.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-white truncate">{r.name}</p>
+                            <p className="text-3xs text-gray-500 font-mono">{r.joinedAt}</p>
+                          </div>
+                          <span className="shrink-0 text-3xs font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-2 py-0.5">
+                            Joined
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </div>
+            )}
+
+            {/* ===================== WALLET ===================== */}
+            {section === "wallet" && (
+              <div className="flex flex-col gap-5">
+                <Card>
+                  <p className="text-xs text-gray-400">Available to withdraw</p>
+                  <p className="text-3xl sm:text-4xl font-extrabold text-white mt-1">
+                    {money(wallet.available)}
+                  </p>
+
+                  <button
+                    onClick={openWithdraw}
+                    disabled={wallet.available < wallet.minWithdrawal}
+                    className="mt-4 w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-cyan to-brand-purple px-6 py-3 text-sm font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Banknote className="h-4 w-4" /> Withdraw money
+                  </button>
+                  {wallet.available < wallet.minWithdrawal && (
+                    <p className="text-3xs text-gray-500 mt-2">
+                      Minimum withdrawal is {money(wallet.minWithdrawal)}.
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3 mt-5 pt-4 border-t border-brand-card-border/50">
+                    <Figure label="Referral bonus" value={money(wallet.referralEarnings)} />
+                    <Figure label="Telemetry earnings" value={money(wallet.uploadEarnings)} />
+                    <Figure label="Awaiting payout" value={money(wallet.pendingWithdrawal)} />
+                    <Figure label="Already paid out" value={money(wallet.withdrawn)} />
+                  </div>
+                </Card>
+
+                <Card>
+                  <h2 className="text-sm font-bold text-white mb-3">Withdrawal history</h2>
+                  {withdrawals.length === 0 ? (
+                    <p className="text-xs text-gray-500 py-4 text-center">No withdrawals yet.</p>
+                  ) : (
+                    <div className="flex flex-col">
+                      {withdrawals.map((w) => (
+                        <div key={w.id} className="flex items-center justify-between gap-3 py-2.5 border-b border-brand-card-border/40 last:border-0">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-white">{money(w.amount)}</p>
+                            <p className="text-3xs text-gray-500 font-mono">{w.requestedAt}</p>
+                            {w.adminNote && (
+                              <p className="text-3xs text-gray-400 mt-0.5">{w.adminNote}</p>
+                            )}
+                          </div>
+                          <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-3xs font-semibold capitalize ${statusTone(w.status)}`}>
+                            {w.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </div>
+            )}
+
+            {/* ===================== TELEMETRY ===================== */}
+            {section === "telemetry" && (
+              <div className="flex flex-col gap-5">
+                <Card>
+                  <h2 className="text-base font-bold text-white">Upload telemetry</h2>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Upload your recording and the hours you worked. An admin reviews it,
+                    and approved hours are paid into your wallet.
+                  </p>
+
+                  <form onSubmit={handleTelemetryUpload} className="mt-4 flex flex-col gap-4">
+                    <div
+                      onClick={triggerFileSelect}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={handleDrop}
+                      className="cursor-pointer rounded-xl border-2 border-dashed border-brand-card-border hover:border-brand-cyan/60 p-6 text-center transition-colors"
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        onChange={handleFileChange}
+                        accept=".mp4,.avi,.mov,.webm,.mkv,.json"
+                        className="hidden"
+                      />
+                      <Upload className="h-7 w-7 text-brand-cyan mx-auto mb-2" />
+                      {videoFile ? (
+                        <p className="text-xs text-white font-semibold break-all">{videoFile.name}</p>
+                      ) : (
+                        <>
+                          <p className="text-xs text-gray-300">Tap to choose a file, or drop it here</p>
+                          <p className="text-3xs text-gray-500 mt-1">MP4, AVI, MOV, WEBM, MKV · max 500MB</p>
+                        </>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-2xs font-semibold text-gray-300 uppercase tracking-wider mb-1.5">
+                        Hours worked
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={hoursInput}
+                        onChange={(e) => setHoursInput(e.target.value)}
+                        placeholder="e.g. 3.5"
+                        className="w-full bg-brand-dark/50 border border-brand-card-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-cyan"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-2xs font-semibold text-gray-300 uppercase tracking-wider mb-1.5">
+                        Note for the reviewer (optional)
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={userMessageInput}
+                        onChange={(e) => setUserMessageInput(e.target.value)}
+                        placeholder="Anything the reviewer should know…"
+                        className="w-full bg-brand-dark/50 border border-brand-card-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-cyan resize-none"
+                      />
+                    </div>
+
+                    <label className="flex items-start gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={termsConsent}
+                        onChange={(e) => setTermsConsent(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-brand-cyan"
+                      />
+                      <span className="text-xs text-gray-400">
+                        I confirm this recording is my own work and the hours stated are accurate.
+                      </span>
+                    </label>
+
+                    {uploadError && (
+                      <div className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2.5">
+                        <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                        <p className="text-xs text-red-300">{uploadError}</p>
+                      </div>
+                    )}
+
+                    {isParsing && (
+                      <div>
+                        <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-brand-cyan to-brand-purple transition-all"
+                            style={{ width: `${parseProgress}%` }}
+                          />
+                        </div>
+                        <p className="text-3xs font-mono text-gray-500 mt-1.5">{parsePhase}</p>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isParsing || !videoFile}
+                      className="rounded-xl bg-gradient-to-r from-brand-cyan to-brand-purple py-3 text-sm font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {isParsing ? "Uploading…" : "Submit telemetry"}
+                    </button>
+                  </form>
+                </Card>
+
+                <Card>
+                  <h2 className="text-sm font-bold text-white mb-3">Your submissions ({logs.length})</h2>
+                  {logs.length === 0 ? (
+                    <p className="text-xs text-gray-500 py-4 text-center">Nothing uploaded yet.</p>
+                  ) : (
+                    <div className="flex flex-col">
+                      {logs.map((l, i) => (
+                        <div key={i} className="py-3 border-b border-brand-card-border/40 last:border-0">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-white break-all">{l.filename}</p>
+                              <p className="text-3xs text-gray-500 font-mono mt-0.5">
+                                {l.durationHours} hrs · {l.timestamp}
+                              </p>
+                            </div>
+                            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-3xs font-semibold ${statusTone(l.status)}`}>
+                              {l.status}
+                            </span>
+                          </div>
+                          {l.adminFeedback && (
+                            <p className="text-3xs text-gray-400 mt-1.5">
+                              <span className="text-gray-500">Reviewer:</span> {l.adminFeedback}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </div>
+            )}
+
+            {/* ===================== PROFILE ===================== */}
+            {section === "profile" && (
+              <Card>
+                <h2 className="text-base font-bold text-white mb-4">My profile</h2>
+                <div className="flex flex-col gap-3.5">
+                  <Field label="Name" value={user.name} />
+                  <Field label="Email" value={user.email} />
+                  <Field label="Phone (your referral ID)" value={user.phone} />
+                  <Field label="Address" value={user.address} />
+                </div>
+                <div className="mt-5 pt-4 border-t border-brand-card-border/50 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => (window.location.href = `/change-password?email=${encodeURIComponent(user.email)}`)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-brand-card-border px-4 py-2.5 text-xs font-semibold text-gray-200 hover:border-brand-cyan/50"
+                  >
+                    <Key className="h-3.5 w-3.5" /> Change password
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 px-4 py-2.5 text-xs font-semibold text-red-400 hover:bg-red-500/10"
+                  >
+                    <LogOut className="h-3.5 w-3.5" /> Sign out
+                  </button>
+                </div>
+              </Card>
+            )}
+          </main>
       </div>
+
+      {/* ---------------- WITHDRAW MODAL ---------------- */}
+      {showWithdraw && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div
+            onClick={() => setShowWithdraw(false)}
+            className="absolute inset-0 bg-black/70"
+          />
+          <div className="relative w-full sm:max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl border border-brand-card-border bg-[#12141a] p-5">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-base font-bold text-white">Withdraw money</h3>
+              <button onClick={() => setShowWithdraw(false)} aria-label="Close">
+                <X className="h-5 w-5 text-gray-400" />
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mb-4">
+              Available: <b className="text-emerald-400">{money(wallet.available)}</b>. Tell us where to send it.
+            </p>
+
+            <form onSubmit={submitWithdraw} className="flex flex-col gap-3">
+              <ModalField label="Amount (₹)">
+                <input
+                  type="number" step="0.01" min={wallet.minWithdrawal} max={wallet.available} required
+                  value={wAmount} onChange={(e) => setWAmount(e.target.value)}
+                  className="w-full bg-brand-dark/60 border border-brand-card-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-cyan"
+                />
+              </ModalField>
+              <ModalField label="Account holder name">
+                <input type="text" required value={wHolder} onChange={(e) => setWHolder(e.target.value)}
+                  className="w-full bg-brand-dark/60 border border-brand-card-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-cyan" />
+              </ModalField>
+              <ModalField label="Bank name">
+                <input type="text" required value={wBank} onChange={(e) => setWBank(e.target.value)}
+                  className="w-full bg-brand-dark/60 border border-brand-card-border rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-cyan" />
+              </ModalField>
+              <ModalField label="Account number">
+                <input type="text" required value={wAccount} onChange={(e) => setWAccount(e.target.value)}
+                  className="w-full bg-brand-dark/60 border border-brand-card-border rounded-xl px-3.5 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-brand-cyan" />
+              </ModalField>
+              <ModalField label="IFSC code">
+                <input type="text" required value={wIfsc} onChange={(e) => setWIfsc(e.target.value)}
+                  className="w-full bg-brand-dark/60 border border-brand-card-border rounded-xl px-3.5 py-2.5 text-sm text-white font-mono uppercase focus:outline-none focus:border-brand-cyan" />
+              </ModalField>
+
+              {wError && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2.5">
+                  <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-300">{wError}</p>
+                </div>
+              )}
+
+              <button
+                type="submit" disabled={wSubmitting}
+                className="mt-1 rounded-xl bg-gradient-to-r from-brand-cyan to-brand-purple py-3 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {wSubmitting ? "Submitting…" : "Request withdrawal"}
+              </button>
+              <p className="text-3xs text-gray-500 text-center">
+                Our team reviews the request and transfers the money to this account.
+              </p>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- helpers */
+
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-brand-card-border bg-brand-card/40 p-4 sm:p-5">
+      {children}
+    </div>
+  );
+}
+
+function StatCard({
+  icon: Icon, label, value, tone,
+}: { icon: React.ElementType; label: string; value: string; tone: string }) {
+  const tones: Record<string, string> = {
+    emerald: "bg-emerald-500/10 text-emerald-400",
+    cyan: "bg-brand-cyan/10 text-brand-cyan",
+    violet: "bg-brand-purple/10 text-brand-purple",
+    slate: "bg-white/5 text-gray-300",
+  };
+  return (
+    <div className="rounded-2xl border border-brand-card-border bg-brand-card/40 p-3.5 sm:p-4">
+      <div className={`h-8 w-8 rounded-lg grid place-items-center mb-2.5 ${tones[tone]}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <p className="text-3xs text-gray-500 uppercase tracking-wider">{label}</p>
+      <p className="text-lg sm:text-xl font-bold text-white mt-0.5 truncate">{value}</p>
+    </div>
+  );
+}
+
+function Figure({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-3xs text-gray-500 uppercase tracking-wider">{label}</p>
+      <p className="text-sm font-bold text-white mt-0.5">{value}</p>
+    </div>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-3xs text-gray-500 uppercase tracking-wider">{label}</p>
+      <p className="text-sm text-white mt-0.5 break-words">{value || "—"}</p>
+    </div>
+  );
+}
+
+function ModalField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-2xs font-semibold text-gray-300 uppercase tracking-wider mb-1.5">
+        {label}
+      </label>
+      {children}
     </div>
   );
 }

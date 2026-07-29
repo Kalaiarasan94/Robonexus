@@ -55,13 +55,13 @@ export default function LoginPage() {
 
           <div className="text-center mb-8">
             <span className="text-xs font-bold font-mono tracking-widest text-brand-cyan uppercase bg-brand-cyan/10 px-3.5 py-1.5 rounded-full border border-brand-cyan/20">
-              Contractor Login
+              Customer Login
             </span>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-4">
               Access Control Portal
             </h1>
             <p className="text-gray-400 text-xs mt-2">
-              Decrypt contractor security key to enter dashboard telemetry
+              Decrypt customer security key to enter dashboard telemetry
             </p>
           </div>
 

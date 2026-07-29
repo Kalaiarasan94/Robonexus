@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS `registrations` (
   `ifsc_code`      VARCHAR(50)  NOT NULL,
   `city`           VARCHAR(100) NOT NULL,
   `state`          VARCHAR(100) NOT NULL,
+  `referred_by`    VARCHAR(50)  NOT NULL DEFAULT '',
   `timestamp`      DATETIME     NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -72,6 +73,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `bank_name`      VARCHAR(255) NOT NULL,
   `account_number` VARCHAR(100) NOT NULL,
   `ifsc_code`      VARCHAR(50)  NOT NULL,
+  `referred_by`    VARCHAR(50)  NOT NULL DEFAULT '',
   `timestamp`      DATETIME     NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -137,6 +139,36 @@ CREATE TABLE IF NOT EXISTS `settings` (
 -- INSERT INTO `settings` (`setting_key`, `setting_value`, `updated_at`)
 --   VALUES ('payment_mode', 'live', NOW())
 --   ON DUPLICATE KEY UPDATE `setting_value` = 'live', `updated_at` = NOW();
+
+
+-- ---------------------------------------------------------------------------
+-- 9. withdrawals — wallet payout requests raised from the customer portal
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `withdrawals` (
+  `id`             INT AUTO_INCREMENT PRIMARY KEY,
+  `user_email`     VARCHAR(255)  NOT NULL,
+  `user_name`      VARCHAR(255)  NOT NULL DEFAULT '',
+  `amount`         DECIMAL(10,2) NOT NULL,
+  `account_holder` VARCHAR(255)  NOT NULL DEFAULT '',
+  `bank_name`      VARCHAR(255)  NOT NULL DEFAULT '',
+  `account_number` VARCHAR(100)  NOT NULL DEFAULT '',
+  `ifsc_code`      VARCHAR(50)   NOT NULL DEFAULT '',
+  `status`         VARCHAR(20)   NOT NULL DEFAULT 'pending',
+  `admin_note`     TEXT          NOT NULL,
+  `requested_at`   DATETIME      NOT NULL,
+  `processed_at`   DATETIME      NULL DEFAULT NULL,
+  INDEX `idx_withdrawals_user` (`user_email`),
+  INDEX `idx_withdrawals_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------------------
+-- 10. Referral linkage. `referred_by` holds the REFERRER'S PHONE NUMBER, which
+--     is what a contractor's referral ID actually is. Run these two only if the
+--     tables already existed before referrals were added; the CREATE statements
+--     above do not include the column.
+-- ---------------------------------------------------------------------------
+ALTER TABLE `users`         ADD COLUMN IF NOT EXISTS `referred_by` VARCHAR(50) NOT NULL DEFAULT '';
+ALTER TABLE `registrations` ADD COLUMN IF NOT EXISTS `referred_by` VARCHAR(50) NOT NULL DEFAULT '';
 
 
 -- ============================================================================

@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
+import ClientLayout from "@/components/layout/ClientLayout";
 import AnimatedGradient from "@/components/animations/AnimatedGradient";
 import FloatingElements from "@/components/animations/FloatingElements";
-import PageTransition from "@/components/animations/PageTransition";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,18 +35,10 @@ export default function RootLayout({
         <AnimatedGradient />
         <FloatingElements />
         
-        {/* Header navigation */}
-        <Header />
-        
-        {/* Main Content Area */}
-        <main className="flex-grow pt-24 pb-12">
-          <PageTransition>
-            {children}
-          </PageTransition>
-        </main>
-
-        {/* Global Footer */}
-        <Footer />
+        {/* Client Layout Wrapper (Handles conditional Header/Footer/Padding) */}
+        <ClientLayout>
+          {children}
+        </ClientLayout>
       </body>
     </html>
   );

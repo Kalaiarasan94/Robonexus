@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../backend/db.php';
 require_once __DIR__ . '/../backend/admin_log.php';
 require_once __DIR__ . '/../backend/settings.php';
+require_once __DIR__ . '/../backend/referral.php';
 
 session_start();
 
@@ -77,6 +78,51 @@ if ($isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['set_pa
     exit();
 }
 
+// 2c. Handle withdrawal payout actions (login required — this moves real money)
+if ($isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['withdrawal_action'])) {
+    $wid = (int) ($_POST['withdrawal_id'] ?? 0);
+    $action = $_POST['withdrawal_action'] === 'paid' ? 'paid' : 'rejected';
+    $note = trim($_POST['withdrawal_note'] ?? '');
+    $now = date('Y-m-d H:i:s');
+
+    if ($wid > 0) {
+        $done = false;
+        if ($pdo !== null) {
+            try {
+                $st = $pdo->prepare("UPDATE `withdrawals` SET `status` = :s, `admin_note` = :n, `processed_at` = :t WHERE `id` = :id");
+                $st->execute([':s' => $action, ':n' => $note, ':t' => $now, ':id' => $wid]);
+                $done = $st->rowCount() > 0;
+            } catch (PDOException $e) {
+                error_log("Withdrawal update failed: " . $e->getMessage());
+            }
+        }
+        // Mirror into the JSON store too.
+        $wf = __DIR__ . '/../backend/withdrawals.json';
+        if (file_exists($wf)) {
+            $wd = json_decode(file_get_contents($wf), true);
+            if (is_array($wd)) {
+                foreach ($wd as &$row) {
+                    if ((int) ($row['id'] ?? 0) === $wid) {
+                        $row['status'] = $action;
+                        $row['adminNote'] = $note;
+                        $row['processedAt'] = $now;
+                        $done = true;
+                    }
+                }
+                unset($row);
+                file_put_contents($wf, json_encode($wd, JSON_PRETTY_PRINT), LOCK_EX);
+            }
+        }
+        if ($done) {
+            logAdminAction($pdo, 'withdrawal',
+                "Withdrawal #{$wid} marked \"{$action}\"." . ($note !== '' ? " Note: \"{$note}\"" : ''),
+                $currentAdmin);
+        }
+    }
+    header("Location: index.php#withdrawals");
+    exit();
+}
+
 $paymentMode = getPaymentMode($pdo);
 $paymentAmount = getPaymentAmount($pdo);
 
@@ -87,6 +133,7 @@ $contacts = [];
 $uploads = [];
 $payments = [];
 $adminLogs = [];
+$withdrawals = [];
 $totalRevenue = 0;
 $paymentsTotal = 0;
 $userCount = 0;
@@ -207,6 +254,28 @@ if ($isLoggedIn) {
         }
 
         try {
+            $stmt = $pdo->query("SELECT * FROM `withdrawals` ORDER BY (`status` = 'pending') DESC, `requested_at` DESC");
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $withdrawals[] = [
+                    'id' => (int) $row['id'],
+                    'userEmail' => $row['user_email'],
+                    'userName' => $row['user_name'],
+                    'amount' => (float) $row['amount'],
+                    'accountHolder' => $row['account_holder'],
+                    'bankName' => $row['bank_name'],
+                    'accountNumber' => $row['account_number'],
+                    'ifscCode' => $row['ifsc_code'],
+                    'status' => $row['status'],
+                    'adminNote' => $row['admin_note'],
+                    'requestedAt' => $row['requested_at'],
+                    'processedAt' => $row['processed_at'],
+                ];
+            }
+        } catch (PDOException $e) {
+            error_log("Failed to query withdrawals: " . $e->getMessage());
+        }
+
+        try {
             $stmt = $pdo->query("SELECT * FROM `admin_logs` ORDER BY `timestamp` DESC, `id` DESC LIMIT 300");
             $dbLogs = $stmt->fetchAll(PDO::FETCH_ASSOC);
             foreach ($dbLogs as $row) {
@@ -310,6 +379,21 @@ if ($isLoggedIn) {
             $userCount = is_array($usersData) ? count($usersData) : 0;
         }
 
+        // Withdrawals fallback
+        $wFile = __DIR__ . '/../backend/withdrawals.json';
+        if (file_exists($wFile)) {
+            $wd = json_decode(file_get_contents($wFile), true);
+            if (is_array($wd)) {
+                $withdrawals = $wd;
+                usort($withdrawals, function ($a, $b) {
+                    $ap = ($a['status'] ?? '') === 'pending' ? 0 : 1;
+                    $bp = ($b['status'] ?? '') === 'pending' ? 0 : 1;
+                    if ($ap !== $bp) return $ap - $bp;
+                    return strcmp($b['requestedAt'] ?? '', $a['requestedAt'] ?? '');
+                });
+            }
+        }
+
         // Admin logs fallback
         $logsFile = __DIR__ . '/../backend/admin_logs.json';
         if (file_exists($logsFile)) {
@@ -390,6 +474,8 @@ function logActionMeta($action) {
             return ['icon' => 'fa-right-from-bracket','tone' => 'neutral','label' => 'Sign out'];
         case 'verify_upload':
             return ['icon' => 'fa-clipboard-check',  'tone' => 'info',    'label' => 'Verification'];
+        case 'withdrawal':
+            return ['icon' => 'fa-money-bill-transfer', 'tone' => 'info', 'label' => 'Withdrawal processed'];
         case 'payment_mode':
             return ['icon' => 'fa-sliders',          'tone' => 'danger',  'label' => 'Payment mode changed'];
         default:
@@ -1292,6 +1378,15 @@ function logActionMeta($action) {
                         <i class="fa-solid fa-credit-card"></i> Payments
                         <span class="nav-count"><?php echo count($payments); ?></span>
                     </button>
+                    <button class="nav-item" data-view="withdrawals">
+                        <i class="fa-solid fa-money-bill-transfer"></i> Withdrawals
+                        <?php $pendingW = count(array_filter($withdrawals, fn($w) => ($w['status'] ?? '') === 'pending')); ?>
+                        <?php if ($pendingW > 0): ?>
+                            <span class="nav-count" style="background: var(--warn-soft); color: var(--warn);"><?php echo $pendingW; ?></span>
+                        <?php else: ?>
+                            <span class="nav-count"><?php echo count($withdrawals); ?></span>
+                        <?php endif; ?>
+                    </button>
                     <button class="nav-item" data-view="transactions">
                         <i class="fa-solid fa-receipt"></i> Transactions
                         <span class="nav-count"><?php echo count($orders); ?></span>
@@ -1914,6 +2009,88 @@ function logActionMeta($action) {
                     </div>
                 </section>
 
+                <!-- ==================== WITHDRAWALS ==================== -->
+                <section class="view" id="view-withdrawals">
+                    <div class="card">
+                        <div class="card-head">
+                            <h2>Wallet payout requests</h2>
+                            <span class="count-tag"><?php echo count($withdrawals); ?></span>
+                            <?php if ($pendingW > 0): ?>
+                                <span class="tag t-amber"><i class="fa-solid fa-hourglass-half"></i> <?php echo $pendingW; ?> awaiting payout</span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="table-scroll">
+                            <?php if (count($withdrawals) > 0): ?>
+                                <table id="tbl-withdrawals">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Contractor</th>
+                                            <th>Amount</th>
+                                            <th>Send to</th>
+                                            <th>Status</th>
+                                            <th>Requested</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($withdrawals as $w): ?>
+                                            <?php
+                                            $st = $w['status'] ?? 'pending';
+                                            $stClass = $st === 'paid' ? 't-green' : ($st === 'rejected' ? 't-rose' : 't-amber');
+                                            ?>
+                                            <tr>
+                                                <td><span class="tag tag-mono t-slate">#<?php echo (int) ($w['id'] ?? 0); ?></span></td>
+                                                <td>
+                                                    <div class="stack">
+                                                        <span class="strong"><?php echo htmlspecialchars($w['userName'] ?? ''); ?></span>
+                                                        <span class="sub"><?php echo htmlspecialchars($w['userEmail'] ?? ''); ?></span>
+                                                    </div>
+                                                </td>
+                                                <td class="strong num nowrap">₹<?php echo number_format((float) ($w['amount'] ?? 0), 2); ?></td>
+                                                <td>
+                                                    <div class="stack">
+                                                        <span class="strong"><?php echo htmlspecialchars($w['accountHolder'] ?? ''); ?></span>
+                                                        <span class="sub"><?php echo htmlspecialchars($w['bankName'] ?? ''); ?></span>
+                                                        <span class="sub mono"><?php echo htmlspecialchars($w['accountNumber'] ?? ''); ?> · <?php echo htmlspecialchars($w['ifscCode'] ?? ''); ?></span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span class="tag <?php echo $stClass; ?>" style="text-transform: capitalize;"><?php echo htmlspecialchars($st); ?></span>
+                                                    <?php if (!empty($w['adminNote'])): ?>
+                                                        <div class="sub" style="margin-top:4px; max-width:180px; white-space:normal;"><?php echo htmlspecialchars($w['adminNote']); ?></div>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td class="nowrap mono"><?php echo htmlspecialchars($w['requestedAt'] ?? ''); ?></td>
+                                                <td>
+                                                    <?php if ($st === 'pending'): ?>
+                                                        <form method="POST" action="index.php" class="verify" style="min-width:190px;">
+                                                            <input type="hidden" name="withdrawal_id" value="<?php echo (int) ($w['id'] ?? 0); ?>">
+                                                            <textarea name="withdrawal_note" rows="2" placeholder="Reference / UTR number…" aria-label="Payout note"></textarea>
+                                                            <div class="verify-row">
+                                                                <button class="btn-verify" name="withdrawal_action" value="paid" style="flex:1;">Mark paid</button>
+                                                                <button class="btn-verify" name="withdrawal_action" value="rejected"
+                                                                        style="flex:1; background: var(--danger);">Reject</button>
+                                                            </div>
+                                                        </form>
+                                                    <?php else: ?>
+                                                        <span class="muted-note">Processed <?php echo htmlspecialchars($w['processedAt'] ?? ''); ?></span>
+                                                    <?php endif; ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            <?php else: ?>
+                                <div class="empty">
+                                    <i class="fa-solid fa-money-bill-transfer"></i>
+                                    <p>No withdrawal requests yet. When a contractor withdraws from their wallet, it appears here with their bank details.</p>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- ==================== SETTINGS ==================== -->
                 <section class="view" id="view-settings">
                     <div class="card">
@@ -2021,6 +2198,7 @@ function logActionMeta($action) {
             telemetry:    ['Telemetry',     'Video submissions awaiting review'],
             inquiries:    ['Inquiries',     'Messages from the contact form'],
             logs:         ['Admin Logs',    'Audit trail of console activity'],
+            withdrawals:  ['Withdrawals',   'Wallet payout requests from contractors'],
             settings:     ['Settings',      'Payment mode and console configuration']
         };
 

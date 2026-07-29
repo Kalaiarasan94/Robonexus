@@ -139,6 +139,38 @@ try {
         `updated_at` DATETIME NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
 
+    // Table 9: withdrawals — wallet payout requests raised from the customer portal
+    $pdo->exec("CREATE TABLE IF NOT EXISTS `withdrawals` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `user_email` VARCHAR(255) NOT NULL,
+        `user_name` VARCHAR(255) NOT NULL DEFAULT '',
+        `amount` DECIMAL(10,2) NOT NULL,
+        `account_holder` VARCHAR(255) NOT NULL DEFAULT '',
+        `bank_name` VARCHAR(255) NOT NULL DEFAULT '',
+        `account_number` VARCHAR(100) NOT NULL DEFAULT '',
+        `ifsc_code` VARCHAR(50) NOT NULL DEFAULT '',
+        `status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+        `admin_note` TEXT NOT NULL,
+        `requested_at` DATETIME NOT NULL,
+        `processed_at` DATETIME NULL DEFAULT NULL,
+        INDEX `idx_withdrawals_user` (`user_email`),
+        INDEX `idx_withdrawals_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+
+    // Referral linkage: who introduced this contractor (stores the referrer's phone).
+    foreach (['users', 'registrations'] as $refTable) {
+        try {
+            $pdo->query("SELECT `referred_by` FROM `{$refTable}` LIMIT 1;");
+        } catch (PDOException $e) {
+            try {
+                $pdo->exec("ALTER TABLE `{$refTable}` ADD COLUMN `referred_by` VARCHAR(50) NOT NULL DEFAULT '';");
+                $pdo->exec("CREATE INDEX `idx_{$refTable}_referred_by` ON `{$refTable}` (`referred_by`);");
+            } catch (PDOException $ex) {
+                error_log("Failed to add referred_by to {$refTable}: " . $ex->getMessage());
+            }
+        }
+    }
+
     // Check & Alter tables if columns are missing
     // 1. Alter orders to add customer_email
     try {

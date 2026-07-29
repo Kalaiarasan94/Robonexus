@@ -8,6 +8,7 @@ header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-W
 header("Content-Type: application/json; charset=UTF-8");
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/referral.php';
 require_once __DIR__ . '/mail.php';
 
 // 2. Handle OPTIONS preflight requests
@@ -31,15 +32,30 @@ $fullName = isset($_POST['fullName']) ? trim($_POST['fullName']) : '';
 $email = isset($_POST['email']) ? trim($_POST['email']) : '';
 $phone = isset($_POST['phone']) ? trim($_POST['phone']) : '';
 $address = isset($_POST['address']) ? trim($_POST['address']) : '';
+// Bank details are no longer collected during registration — the sign-up form
+// only asks for name, email, phone and address. These stay as empty strings so
+// the NOT NULL columns still accept the insert, and so any older client that
+// does still post them keeps working.
+// Optional referral code — the phone number of an existing contractor. Verified
+// against real accounts so a bogus code is simply dropped rather than stored.
+$referralCode = isset($_POST['referralCode']) ? trim($_POST['referralCode']) : '';
+$referredBy = '';
+if ($referralCode !== '') {
+    $referrer = findUserByReferralCode($pdo, $referralCode);
+    if ($referrer !== null && normalisePhone($referrer['phone']) !== normalisePhone($phone)) {
+        $referredBy = normalisePhone($referrer['phone']);
+    }
+}
+
 $bankName = isset($_POST['bankName']) ? trim($_POST['bankName']) : '';
 $accountNumber = isset($_POST['accountNumber']) ? trim($_POST['accountNumber']) : '';
 $ifscCode = isset($_POST['ifscCode']) ? trim($_POST['ifscCode']) : '';
 
-if (empty($fullName) || empty($email) || empty($phone) || empty($address) || empty($bankName) || empty($accountNumber) || empty($ifscCode)) {
+if (empty($fullName) || empty($email) || empty($phone) || empty($address)) {
     http_response_code(400);
     echo json_encode([
         "status" => "error",
-        "message" => "All fields (Legal Name, Email, Phone, Address, Bank details) are required."
+        "message" => "All fields (Legal Name, Email, Phone, Address) are required."
     ]);
     exit();
 }
@@ -119,7 +135,7 @@ if ($pdo !== null) {
         $pdo->beginTransaction();
 
         // A. Insert into registrations
-        $stmtReg = $pdo->prepare("INSERT INTO `registrations` (`register_id`, `full_name`, `email`, `phone`, `address`, `bank_name`, `account_number`, `ifsc_code`, `timestamp`) VALUES (:register_id, :full_name, :email, :phone, :address, :bank_name, :account_number, :ifsc_code, :timestamp)");
+        $stmtReg = $pdo->prepare("INSERT INTO `registrations` (`register_id`, `full_name`, `email`, `phone`, `address`, `bank_name`, `account_number`, `ifsc_code`, `referred_by`, `timestamp`) VALUES (:register_id, :full_name, :email, :phone, :address, :bank_name, :account_number, :ifsc_code, :referred_by, :timestamp)");
         $stmtReg->execute([
             ':register_id' => $registerId,
             ':full_name' => $fullName,
@@ -129,6 +145,7 @@ if ($pdo !== null) {
             ':bank_name' => $bankName,
             ':account_number' => $accountNumber,
             ':ifsc_code' => $ifscCode,
+            ':referred_by' => $referredBy,
             ':timestamp' => $timestamp
         ]);
 
@@ -148,7 +165,7 @@ if ($pdo !== null) {
         ]);
 
         // C. Insert into users (username = email, password = hashed phone)
-        $stmtUser = $pdo->prepare("INSERT INTO `users` (`email`, `password`, `name`, `phone`, `address`, `bank_name`, `account_number`, `ifsc_code`, `timestamp`) VALUES (:email, :password, :name, :phone, :address, :bank_name, :account_number, :ifsc_code, :timestamp)");
+        $stmtUser = $pdo->prepare("INSERT INTO `users` (`email`, `password`, `name`, `phone`, `address`, `bank_name`, `account_number`, `ifsc_code`, `referred_by`, `timestamp`) VALUES (:email, :password, :name, :phone, :address, :bank_name, :account_number, :ifsc_code, :referred_by, :timestamp)");
         $stmtUser->execute([
             ':email' => $email,
             ':password' => $hashedPassword,
@@ -158,6 +175,7 @@ if ($pdo !== null) {
             ':bank_name' => $bankName,
             ':account_number' => $accountNumber,
             ':ifsc_code' => $ifscCode,
+            ':referred_by' => $referredBy,
             ':timestamp' => $timestamp
         ]);
 
@@ -200,6 +218,7 @@ $newRegData = [
     "bankName" => $bankName,
     "accountNumber" => $accountNumber,
     "ifscCode" => $ifscCode,
+    "referredBy" => $referredBy,
     "timestamp" => $timestamp
 ];
 $registrations[] = $newRegData;
@@ -241,6 +260,7 @@ $newUserData = [
     "bankName" => $bankName,
     "accountNumber" => $accountNumber,
     "ifscCode" => $ifscCode,
+    "referredBy" => $referredBy,
     "timestamp" => $timestamp
 ];
 $users[] = $newUserData;
@@ -401,10 +421,13 @@ if (!empty($adminEmail)) {
         <li><strong>Registered ID (Worker ID):</strong> {$registerId}</li>
         <li><strong>Order ID:</strong> {$orderId}</li>
         <li><strong>Razorpay Payment ID:</strong> {$razorpayPaymentId}</li>
-        <li><strong>Total Paid:</strong> ₹" . htmlspecialchars($paymentAmount) . "</li>
-        <li><strong>Bank Name:</strong> " . htmlspecialchars($bankName) . "</li>
-        <li><strong>Account Number:</strong> " . htmlspecialchars($accountNumber) . "</li>
-        <li><strong>IFSC Code:</strong> " . htmlspecialchars($ifscCode) . "</li>
+        <li><strong>Total Paid:</strong> ₹" . htmlspecialchars($paymentAmount) . "</li>"
+        // Only shown if a client actually supplied them — the sign-up form no
+        // longer collects bank details, so normally these rows are omitted.
+        . ($bankName !== '' ? "\n        <li><strong>Bank Name:</strong> " . htmlspecialchars($bankName) . "</li>" : "")
+        . ($accountNumber !== '' ? "\n        <li><strong>Account Number:</strong> " . htmlspecialchars($accountNumber) . "</li>" : "")
+        . ($ifscCode !== '' ? "\n        <li><strong>IFSC Code:</strong> " . htmlspecialchars($ifscCode) . "</li>" : "")
+        . "
     </ul>
     <p>You can review this payment under the Payments menu in the admin control panel.</p>
     ";
