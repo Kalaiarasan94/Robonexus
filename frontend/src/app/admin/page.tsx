@@ -4,10 +4,16 @@ import { useEffect } from "react";
 
 export default function AdminRedirect() {
   useEffect(() => {
-    // Redirect to the Apache PHP admin panel URL
+    // Bounce to the PHP admin panel, which lives beside the backend folder.
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost/robonexus/backend";
-    // We parse the base URL of the API (which is /robonexus/backend) to get /robonexus/admin
-    const adminUrl = apiUrl.replace(/\/backend\/?$/, "/admin");
+
+    // Normal case: ".../backend" -> ".../admin". If the API URL has no /backend
+    // suffix the swap would silently do nothing and land the user back on the
+    // API root, so fall back to /admin on the same origin instead.
+    const adminUrl = /\/backend\/?$/.test(apiUrl)
+      ? apiUrl.replace(/\/backend\/?$/, "/admin")
+      : new URL("/admin", apiUrl).href;
+
     window.location.href = adminUrl;
   }, []);
 
