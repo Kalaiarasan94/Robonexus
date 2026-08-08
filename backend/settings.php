@@ -13,6 +13,8 @@ require_once __DIR__ . '/db.php';
 if (!defined('PAYMENT_ACTIVATION_FEE')) define('PAYMENT_ACTIVATION_FEE', 300.00);
 if (!defined('PAYMENT_HARDWARE_FEE'))   define('PAYMENT_HARDWARE_FEE', 349.00);
 if (!defined('PAYMENT_AMOUNT_LIVE'))    define('PAYMENT_AMOUNT_LIVE', PAYMENT_ACTIVATION_FEE + PAYMENT_HARDWARE_FEE);
+// Reduced/offer price — hardware only, activation waived.
+if (!defined('PAYMENT_AMOUNT_OFFER'))   define('PAYMENT_AMOUNT_OFFER', 349.00);
 if (!defined('PAYMENT_AMOUNT_TEST'))    define('PAYMENT_AMOUNT_TEST', 1.00);
 
 if (!function_exists('settingsFilePath')) {
@@ -87,15 +89,34 @@ if (!function_exists('setSetting')) {
 }
 
 if (!function_exists('getPaymentMode')) {
-    /** @return string 'test' or 'live' — anything unrecognised is treated as live. */
+    /**
+     * @return string 'live' (₹649), 'offer' (₹349) or 'test' (₹1).
+     *         Anything unrecognised falls back to 'live' — charging the full
+     *         fee is the safe default if the setting is ever corrupted.
+     */
     function getPaymentMode($pdo) {
-        return getSetting($pdo, 'payment_mode', 'live') === 'test' ? 'test' : 'live';
+        $mode = getSetting($pdo, 'payment_mode', 'live');
+        return in_array($mode, ['live', 'offer', 'test'], true) ? $mode : 'live';
     }
 }
 
 if (!function_exists('getPaymentAmount')) {
     /** The authoritative amount to charge, in rupees. */
     function getPaymentAmount($pdo) {
-        return getPaymentMode($pdo) === 'test' ? PAYMENT_AMOUNT_TEST : PAYMENT_AMOUNT_LIVE;
+        switch (getPaymentMode($pdo)) {
+            case 'test':  return PAYMENT_AMOUNT_TEST;
+            case 'offer': return PAYMENT_AMOUNT_OFFER;
+            default:      return PAYMENT_AMOUNT_LIVE;
+        }
+    }
+}
+
+if (!function_exists('paymentModeLabel')) {
+    function paymentModeLabel($mode) {
+        switch ($mode) {
+            case 'test':  return 'Test';
+            case 'offer': return 'Offer';
+            default:      return 'Live';
+        }
     }
 }

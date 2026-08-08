@@ -12,5 +12,54 @@
         "details": "Withdrawal #1 marked \"paid\". Note: \"UTR 12345678\"",
         "ipAddress": "::1",
         "timestamp": "2026-07-29 14:25:19"
+    },
+    {
+        "action": "login",
+        "actor": "admin",
+        "details": "Successful admin sign-in.",
+        "ipAddress": "::1",
+        "timestamp": "2026-08-05 16:27:48"
+    },
+    {
+        "action": "login",
+        "actor": "admin",
+        "details": "Successful admin sign-in.",
+        "ipAddress": "::1",
+        "timestamp": "2026-08-07 16:37:55"
+    },
+    {
+        "action": "payment_mode",
+        "actor": "admin",
+        "details": "Onboarding payment mode changed from \"live\" to \"offer\" \u2014 customers are now charged \u20b9349.00.",
+        "ipAddress": "::1",
+        "timestamp": "2026-08-07 16:37:55"
+    },
+    {
+        "action": "payment_mode",
+        "actor": "admin",
+        "details": "Onboarding payment mode changed from \"offer\" to \"test\" \u2014 customers are now charged \u20b91.00.",
+        "ipAddress": "::1",
+        "timestamp": "2026-08-07 16:37:55"
+    },
+    {
+        "action": "payment_mode",
+        "actor": "admin",
+        "details": "Onboarding payment mode changed from \"test\" to \"live\" \u2014 customers are now charged \u20b9649.00.",
+        "ipAddress": "::1",
+        "timestamp": "2026-08-07 16:37:56"
+    },
+    {
+        "action": "login",
+        "actor": "admin",
+        "details": "Successful admin sign-in.",
+        "ipAddress": "::1",
+        "timestamp": "2026-08-08 00:19:23"
+    },
+    {
+        "action": "login",
+        "actor": "admin",
+        "details": "Successful admin sign-in.",
+        "ipAddress": "::1",
+        "timestamp": "2026-08-08 00:37:00"
     }
 ]

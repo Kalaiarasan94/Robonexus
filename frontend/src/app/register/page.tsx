@@ -36,7 +36,7 @@ const API_BASE = (
 ).replace(/\/$/, "");
 
 interface PaymentConfig {
-  mode: "test" | "live";
+  mode: "test" | "live" | "offer";
   amount: number;
   activationFee: number;
   hardwareFee: number;
@@ -123,7 +123,7 @@ export default function Register() {
       .then((d) => {
         if (cancelled || d?.status !== "success") return;
         setPayCfg({
-          mode: d.mode === "test" ? "test" : "live",
+          mode: ["test", "offer", "live"].includes(d.mode) ? d.mode : "live",
           amount: Number(d.amount) || ONBOARDING_AMOUNT,
           activationFee: Number(d.activationFee) || ACTIVATION_FEE,
           hardwareFee: Number(d.hardwareFee) || HARDWARE_FEE,
@@ -179,10 +179,50 @@ export default function Register() {
     }
   };
 
+  // Keep the browser Back button sane inside this multi-step flow.
+  //
+  // Without this, Back on the payment step walks the user out to the aimstorm.in
+  // gateway page that is still sitting in history — which creates a SECOND
+  // Razorpay order. Pushing a state entry per step means Back moves between
+  // steps instead, and someone who has already paid can never reverse into the
+  // payment screen.
+  useEffect(() => {
+    window.history.replaceState({ rnxStep: 1 }, "");
+  }, []);
+
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const target = (e.state && (e.state as { rnxStep?: number }).rnxStep) || null;
+
+      if (step === 3) {
+        // Payment is done and the account exists — never go back into payment.
+        window.history.pushState({ rnxStep: 3 }, "");
+        return;
+      }
+      if (target === 1 || target === 2) {
+        setStep(target);
+        return;
+      }
+      if (step === 2) {
+        // Leaving the flow from the payment step: drop to the details step
+        // rather than out to the gateway.
+        setStep(1);
+        window.history.pushState({ rnxStep: 1 }, "");
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [step]);
+
+  const goToStep = (next: number) => {
+    setStep(next);
+    window.history.pushState({ rnxStep: next }, "");
+  };
+
   const handleNextToPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (validateStep1()) {
-      setStep(2);
+      goToStep(2);
     }
   };
 
@@ -191,7 +231,7 @@ export default function Register() {
     setSubmitError(null);
     // Persist the entered details so we can finalize registration when the
     // gateway redirects the user back to /register.
-    sessionStorage.setItem(PENDING_KEY, JSON.stringify({ ...formData, referralCode }));
+    localStorage.setItem(PENDING_KEY, JSON.stringify({ ...formData, referralCode }));
 
     const returnUrl = `${window.location.origin}/register`;
     const params = new URLSearchParams({
@@ -241,6 +281,7 @@ export default function Register() {
             password: data.credentials.password,
           });
           setStep(3);
+          window.history.pushState({ rnxStep: 3 }, "");
           setShowPaidPopup(true);
         } else {
           setSubmitError(
@@ -255,7 +296,7 @@ export default function Register() {
         setStep(2);
       } finally {
         setIsSubmitting(false);
-        sessionStorage.removeItem(PENDING_KEY);
+        localStorage.removeItem(PENDING_KEY);
       }
     },
     []
@@ -274,7 +315,7 @@ export default function Register() {
       const rpPaymentId = params.get("razorpay_payment_id") || "";
       const rpOrderId = params.get("razorpay_order_id") || "";
       const amount = params.get("amount") || String(ONBOARDING_AMOUNT);
-      const raw = sessionStorage.getItem(PENDING_KEY);
+      const raw = localStorage.getItem(PENDING_KEY);
       if (raw && rpPaymentId) {
         try {
           const stored = JSON.parse(raw) as RegistrationForm;
@@ -312,12 +353,15 @@ export default function Register() {
       </section>
 
       {/* Test mode is a real charge, just a small one — say so plainly. */}
-      {payCfg.mode === "test" && (
+      {payCfg.mode !== "live" && (
         <div className="max-w-md mx-auto mb-6 flex items-start gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
           <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
           <p className="text-2xs text-amber-200/90 leading-relaxed">
-            <span className="font-bold">Test mode.</span> Onboarding is temporarily set to{" "}
-            {money(payCfg.amount)} instead of the standard fee while we verify the payment gateway.
+            <span className="font-bold">
+              {payCfg.mode === "offer" ? "Offer price." : "Test mode."}
+            </span>{" "}
+            Onboarding is currently {money(payCfg.amount)} instead of the standard{" "}
+            {money(payCfg.activationFee + payCfg.hardwareFee)}.
           </p>
         </div>
       )}
@@ -570,14 +614,30 @@ export default function Register() {
                     <h4 className="text-2xs font-mono font-bold text-white uppercase border-b border-brand-card-border/50 pb-2 mb-3">
                       Order Summary details
                     </h4>
-                    <div className="flex justify-between text-xs py-1">
-                      <span className="text-gray-400">Onboarding &amp; Telemetry Activation Fee</span>
-                      <span className="text-white font-mono">{money(payCfg.activationFee)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs py-1">
-                      <span className="text-gray-400">Nexus-Core Model-X Hardware Device</span>
-                      <span className="text-white font-mono">{money(payCfg.hardwareFee)}</span>
-                    </div>
+                    {/* Only itemise when the parts actually sum to the total —
+                        under offer/test pricing the breakdown would contradict it. */}
+                    {payCfg.mode === "live" ? (
+                      <>
+                        <div className="flex justify-between text-xs py-1">
+                          <span className="text-gray-400">Onboarding &amp; Telemetry Activation Fee</span>
+                          <span className="text-white font-mono">{money(payCfg.activationFee)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs py-1">
+                          <span className="text-gray-400">Nexus-Core Model-X Hardware Device</span>
+                          <span className="text-white font-mono">{money(payCfg.hardwareFee)}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex justify-between text-xs py-1">
+                        <span className="text-gray-400">
+                          Onboarding &amp; Hardware Bundle
+                          {payCfg.mode === "offer" && (
+                            <span className="ml-1.5 text-emerald-400 font-semibold">offer price</span>
+                          )}
+                        </span>
+                        <span className="text-white font-mono">{money(payCfg.amount)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-sm py-2 border-t border-brand-card-border/50 mt-2 font-bold">
                       <span className="text-brand-cyan">Total Amount Payable</span>
                       <span className="text-brand-cyan font-mono">{money(payCfg.amount)}</span>
@@ -615,7 +675,7 @@ export default function Register() {
                     <button
                       type="button"
                       disabled={isSubmitting}
-                      onClick={() => setStep(1)}
+                      onClick={() => goToStep(1)}
                       className="w-1/3 rounded-xl border border-brand-card-border bg-brand-dark/40 py-3 text-xs font-bold text-white hover:bg-brand-dark/60 transition-all cursor-pointer disabled:opacity-40"
                     >
                       Back

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php -l backend/razorpay_sync.php)",
+      "Bash(php -l admin/index.php)"
+    ]
+  }
+}

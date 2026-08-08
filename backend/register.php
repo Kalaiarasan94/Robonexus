@@ -69,12 +69,48 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
     exit();
 }
 
-// Check if user already exists
+// The gateway may already have provisioned this account server-to-server via
+// record_payment.php (that happens the moment the payment is verified, so the
+// customer is covered even if their browser never returns). If so, this call is
+// the browser catching up: complete the profile instead of rejecting it.
+$alreadyProvisioned = false;
 if ($pdo !== null) {
     try {
-        $checkStmt = $pdo->prepare("SELECT id FROM `users` WHERE `email` = :email");
+        $checkStmt = $pdo->prepare("SELECT `id` FROM `users` WHERE `email` = :email LIMIT 1");
         $checkStmt->execute([':email' => $email]);
         if ($checkStmt->fetch()) {
+            // Does the payment they are quoting belong to this account?
+            $own = $pdo->prepare(
+                "SELECT `register_id` FROM `payments`
+                 WHERE `payment_id` = :pid AND (`customer_email` = :email OR `customer_email` = '') LIMIT 1"
+            );
+            $own->execute([':pid' => trim($_POST['razorpayPaymentId'] ?? ''), ':email' => $email]);
+            $payRow = $own->fetch(PDO::FETCH_ASSOC);
+
+            if ($payRow !== false) {
+                $alreadyProvisioned = true;
+                $existingRegisterId = $payRow['register_id'] ?? '';
+                // Fill in the details the gateway could not know.
+                try {
+                    $pdo->prepare("UPDATE `users` SET `address` = :a, `referred_by` = CASE WHEN `referred_by` = '' THEN :r ELSE `referred_by` END WHERE `email` = :e")
+                        ->execute([':a' => $address, ':r' => $referredBy, ':e' => $email]);
+                    $pdo->prepare("UPDATE `registrations` SET `address` = :a, `referred_by` = CASE WHEN `referred_by` = '' THEN :r ELSE `referred_by` END WHERE `email` = :e")
+                        ->execute([':a' => $address, ':r' => $referredBy, ':e' => $email]);
+                } catch (PDOException $e) {
+                    error_log("Profile completion update failed: " . $e->getMessage());
+                }
+
+                http_response_code(200);
+                echo json_encode([
+                    "status" => "success",
+                    "message" => "Your account is ready. Sign in with the credentials below.",
+                    "registerId" => $existingRegisterId,
+                    "paymentId" => trim($_POST['razorpayPaymentId'] ?? ''),
+                    "credentials" => ["username" => $email, "password" => $phone]
+                ]);
+                exit();
+            }
+
             http_response_code(400);
             echo json_encode([
                 "status" => "error",
@@ -86,17 +122,60 @@ if ($pdo !== null) {
         error_log("Database error check user existence: " . $e->getMessage());
     }
 } else {
-    // Check fallback JSON files
-    $usersFile = './users.json';
+    // Same logic as the database branch above: if record_payment.php already
+    // provisioned this account from the gateway, treat the browser's call as
+    // completion rather than a duplicate registration.
+    $usersFile = __DIR__ . '/users.json';
     if (file_exists($usersFile)) {
         $usersData = json_decode(file_get_contents($usersFile), true);
         if (is_array($usersData)) {
             foreach ($usersData as $u) {
-                if (strcasecmp($u['email'], $email) === 0) {
+                if (strcasecmp($u['email'] ?? '', $email) === 0) {
+                    $quotedPid = trim($_POST['razorpayPaymentId'] ?? '');
+                    $ownsPayment = false;
+                    $existingRegisterId = '';
+
+                    $payFile = __DIR__ . '/payments.json';
+                    if ($quotedPid !== '' && file_exists($payFile)) {
+                        $payRows = json_decode(file_get_contents($payFile), true);
+                        if (is_array($payRows)) {
+                            foreach ($payRows as $pr) {
+                                if (($pr['paymentId'] ?? '') === $quotedPid
+                                    && (($pr['email'] ?? '') === '' || strcasecmp($pr['email'] ?? '', $email) === 0)) {
+                                    $ownsPayment = true;
+                                    $existingRegisterId = $pr['registerId'] ?? '';
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if ($ownsPayment) {
+                        // Backfill the address/referral the gateway could not know.
+                        foreach ($usersData as &$uu) {
+                            if (strcasecmp($uu['email'] ?? '', $email) === 0) {
+                                if (($uu['address'] ?? '') === '') $uu['address'] = $address;
+                                if (($uu['referredBy'] ?? '') === '') $uu['referredBy'] = $referredBy;
+                            }
+                        }
+                        unset($uu);
+                        file_put_contents($usersFile, json_encode($usersData, JSON_PRETTY_PRINT), LOCK_EX);
+
+                        http_response_code(200);
+                        echo json_encode([
+                            "status" => "success",
+                            "message" => "Your account is ready. Sign in with the credentials below.",
+                            "registerId" => $existingRegisterId,
+                            "paymentId" => $quotedPid,
+                            "credentials" => ["username" => $email, "password" => $phone]
+                        ]);
+                        exit();
+                    }
+
                     http_response_code(400);
                     echo json_encode([
                         "status" => "error",
-                        "message" => "An onboarding account with this email address has already been registered (JSON Database)."
+                        "message" => "An onboarding account with this email address has already been registered."
                     ]);
                     exit();
                 }
@@ -179,9 +258,26 @@ if ($pdo !== null) {
             ':timestamp' => $timestamp
         ]);
 
-        // D. Insert into payments (Razorpay transaction record)
-        $stmtPay = $pdo->prepare("INSERT INTO `payments` (`payment_id`, `order_ref`, `razorpay_order_id`, `register_id`, `customer_name`, `customer_email`, `customer_phone`, `amount`, `status`, `timestamp`) VALUES (:payment_id, :order_ref, :razorpay_order_id, :register_id, :customer_name, :customer_email, :customer_phone, :amount, :status, :timestamp)");
-        $stmtPay->execute([
+        // D. Payments row. The gateway already recorded this server-to-server via
+        //    record_payment.php the moment the signature was verified, so update
+        //    that row with the registration details instead of inserting a
+        //    duplicate. Insert only if we somehow got here first.
+        $existingPay = $pdo->prepare("SELECT `id` FROM `payments` WHERE `payment_id` = :pid LIMIT 1");
+        $existingPay->execute([':pid' => $razorpayPaymentId]);
+
+        if ($existingPay->fetch()) {
+            $stmtPay = $pdo->prepare(
+                "UPDATE `payments` SET `order_ref` = :order_ref, `razorpay_order_id` = :razorpay_order_id,
+                    `register_id` = :register_id, `customer_name` = :customer_name,
+                    `customer_email` = :customer_email, `customer_phone` = :customer_phone,
+                    `amount` = :amount, `status` = 'paid'
+                 WHERE `payment_id` = :payment_id"
+            );
+        } else {
+            $stmtPay = $pdo->prepare("INSERT INTO `payments` (`payment_id`, `order_ref`, `razorpay_order_id`, `register_id`, `customer_name`, `customer_email`, `customer_phone`, `amount`, `status`, `timestamp`) VALUES (:payment_id, :order_ref, :razorpay_order_id, :register_id, :customer_name, :customer_email, :customer_phone, :amount, 'paid', :timestamp)");
+        }
+
+        $payParams = [
             ':payment_id' => $razorpayPaymentId,
             ':order_ref' => $orderId,
             ':razorpay_order_id' => $razorpayOrderId,
@@ -190,9 +286,13 @@ if ($pdo !== null) {
             ':customer_email' => $email,
             ':customer_phone' => $phone,
             ':amount' => $paymentAmount,
-            ':status' => 'paid',
-            ':timestamp' => $timestamp
-        ]);
+        ];
+        // The UPDATE branch has no :timestamp placeholder — keep the original
+        // payment time rather than overwriting it with the onboarding time.
+        if (strpos($stmtPay->queryString, 'INSERT') === 0) {
+            $payParams[':timestamp'] = $timestamp;
+        }
+        $stmtPay->execute($payParams);
 
         $pdo->commit();
         $savedToDb = true;
@@ -270,7 +370,15 @@ $jsonWriteSuccess = file_put_contents($usersFile, json_encode($users, JSON_PRETT
 $paymentsFile = './payments.json';
 $payments = file_exists($paymentsFile) ? json_decode(file_get_contents($paymentsFile), true) : [];
 if (!is_array($payments)) $payments = [];
-$payments[] = [
+// record_payment.php may already have logged this payment server-to-server the
+// moment the gateway verified it. Update that entry rather than appending a
+// second row for the same Razorpay payment id.
+$existingIndex = null;
+foreach ($payments as $i => $pRow) {
+    if (($pRow['paymentId'] ?? '') === $razorpayPaymentId) { $existingIndex = $i; break; }
+}
+
+$paymentRecord = [
     "paymentId" => $razorpayPaymentId,
     "orderRef" => $orderId,
     "razorpayOrderId" => $razorpayOrderId,
@@ -280,8 +388,17 @@ $payments[] = [
     "phone" => $phone,
     "amount" => $paymentAmount,
     "status" => "paid",
-    "timestamp" => $timestamp
+    // Keep the original payment time when one already exists.
+    "timestamp" => $existingIndex !== null
+        ? ($payments[$existingIndex]['timestamp'] ?? $timestamp)
+        : $timestamp
 ];
+
+if ($existingIndex !== null) {
+    $payments[$existingIndex] = $paymentRecord;
+} else {
+    $payments[] = $paymentRecord;
+}
 file_put_contents($paymentsFile, json_encode($payments, JSON_PRETTY_PRINT));
 
 if (!$savedToDb && !$jsonWriteSuccess) {
